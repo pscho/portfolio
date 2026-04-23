@@ -1,12 +1,13 @@
 Basic terminal interface for SQLite. https://sqlite.org/
 
  - Requires the sqlite amalgamation file: https://sqlite.org/amalgamation.html
- #include needs to be updated with the correct version of the amalgamation file.
+ 	- #include needs to be updated with the correct version of the amalgamation file.
  - Requires custom utility library utils.c/utils.h in repo.
 
  - Maximum length of a column name: CHAR_MAX
  - Maximum column display text length: 32
  - UTF-16 unsupported / not tested
+ - Blobs unsupported
 
  Build instructions:
  1. Build sqlite: gcc -o sqlite3.o -c sqlite3.c
@@ -17,4 +18,4 @@ Basic terminal interface for SQLite. https://sqlite.org/
  Run instructions:
  1. Sample database can be found at: https://sqlite.org/test-dbs/file?name=demo01.db (Click "Download")
  2. Run "./sqlite_terminal DB_FILE" (ex. ./sqlite_terminal demo01.db)
-
+ 
