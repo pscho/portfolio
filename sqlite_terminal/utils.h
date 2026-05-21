@@ -1,4 +1,15 @@
 // [] TODO: Verify stack is initialized when calling stackFree?
+// [] TODO: Ideas from Jon Blow talk: https://youtu.be/TH9VCN6UkyQ?si=EzkRWO1g49Hpo6rg&t=2687
+//	Follow multiple return values pattern (errcode parameter for functions)
+//	Custom free() that errors when ptr is null (detect free() on freed)
+//	ALWAYS set ptr to null after free
+//	Dereferencing freed memory error?
+//	"Macros are anti-debug"; run a code generator on macros for debug builds?
+//	"no header files"
+//	Refactorability:
+//		. vs ->; maybe always use ->?
+//		Optional types (Null checking/? types): Don't force them; maybe a preprocessor that adds not null asserts?
+
 
 #include <stdlib.h>
 #include <stdbool.h>
@@ -58,7 +69,31 @@ bool CheckNotZero(int val, const char *contextMsg);
 
 float Square(const float x);
 
-void *realloc_if_needed(void *ptr, size_t * const curr_size, const size_t * const curr_len, const int block_size);
+unsigned long long UnsafePow(const unsigned int x, const unsigned int y);
+
+// String functions
+
+size_t strlcat_s(char * const dest, size_t const numElem, size_t const dest_count, char const * const src,
+			 size_t const src_count);
+
+size_t strncpy_s(char * const dest, size_t const numElem, char const * const src,
+			 size_t const n);
+
+char utf8str_iterate(char const * const str, size_t const remainingNumElem);
+
+/*
+	utf8str_len: Returns the count of UTF-8 codepoints in the string starting at str.
+	Assumes str is not null.
+	Does not include the ending null character in the count.
+	errCode is set to -1 if the string does not end with a null term, 0 otherwise.
+	
+	ex: utf8str_len("aՀ桁ᐰ🁀🁰") -> returns 6
+*/
+size_t utf8str_len(char const * const str, size_t const numElem, int * const errCode);
+
+// End string functions
+
+void *realloc_if_needed(void *ptr, size_t * const curr_size, size_t const * const curr_len, int const block_size);
 
 // Stack implementation functions
 

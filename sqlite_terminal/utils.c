@@ -12,8 +12,6 @@ const unsigned short APPROX_STACK_CHUNK_SIZE = 8;
 
 
 int CheckAssumptions() {
-	int ret = 0;
-	
 	// #1 Assume all data pointers and void pointer are the same size
 	bool *boolPtr = NULL;
 	char *charPtr = NULL;
@@ -121,7 +119,122 @@ float Square(const float x) {
 }
 
 
-void* realloc_if_needed(void *ptr, size_t * const curr_size, const size_t * const curr_len, const int block_size) {
+unsigned long long UnsafePow(const unsigned int x, const unsigned int y) {
+	if (y == 0) return 1;
+	
+	unsigned long long product = 1;
+	for (int i = 0; i < y; ++i) {
+		product *= x;
+	}
+	
+	return product;
+}
+
+
+// String functions
+
+
+size_t strlcat_s(char * const dest, size_t const numElem, size_t const dest_count, char const * const src,
+			 size_t const src_count) {
+	// Preconditions
+	assert(dest != NULL);
+	assert(dest[dest_count] == '\0');
+	assert(src != NULL);
+	assert(src[src_count] == '\0');
+	assert(numElem >= dest_count + src_count + 1);
+
+	if (numElem == 1) return 0;
+	
+	size_t dIdx = dest_count;
+	for (size_t sIdx = 0; sIdx < src_count; ++sIdx) {
+		dest[dIdx] = src[sIdx];
+		++dIdx;
+	}
+	dest[dIdx] = '\0';
+	
+	return dest_count + src_count;
+}
+
+
+size_t strncpy_s(char * const dest, size_t const numElem, char const * const src,
+			 size_t const n) {
+	// Preconditions
+	assert(dest != NULL);
+	assert(src != NULL);
+	assert(numElem >= n + 1);
+	
+	size_t num_read = 0;
+	for (int i = 0; i < n; ++i) {
+		char c = src[i];
+		if (c == '\0') break;
+		
+		dest[i] = src[i];
+		++num_read;
+	}
+	dest[num_read] = '\0';
+	
+	return num_read;
+}
+
+
+char utf8str_iterate(char const * const str, size_t const remainingNumElem) {
+	// Preconditions
+	assert(str != NULL);
+	assert(remainingNumElem > 0);
+	if (remainingNumElem == 1) assert(*str == '\0');
+	
+	char ret = -1;
+	unsigned char const c = (unsigned char) *str;
+	if (c < 0x80) {
+		ret = 1;
+	} else if (c < 0xe0 && remainingNumElem >= 2) {
+		ret = 2;
+	} else if (c < 0xf0 && remainingNumElem >= 3) {
+		ret = 3;
+	} else if (c < 0xf8 && remainingNumElem >= 4) {
+		ret = 4;
+	}
+	
+	return ret;
+}
+
+
+size_t utf8str_len(char const * const str, size_t const numElem, int * const errCode) {
+	// Preconditions
+	assert(str != NULL);
+	
+	*errCode = 0;
+	size_t count = 0;
+	
+	size_t idx = 0;
+	unsigned char c = (unsigned char) *str;
+	while (c != '\0' && idx < numElem - 1) {
+		if (c < 0x80) {
+			++idx;
+			++count;
+		} else if (c < 0xe0) {
+			idx += 2;
+			++count;
+		} else if (c < 0xf0) {
+			idx += 3;
+			++count;
+		} else if (c < 0xf8) {
+			idx += 4;
+			++count;
+		}
+		c = str[idx];
+	}
+	
+	if (idx > numElem - 1) *errCode = -1; // Not a null-terminated string
+
+	return count;
+}
+
+
+// End string functions
+
+
+void* realloc_if_needed(void *ptr, size_t * const curr_size, size_t const * const curr_len, int const block_size) {
 	// Preconditions
 	// errno
 	//assert(errno == 0); // TODO: What is setting errno in sqlite_terminal.c w/o an error
@@ -208,6 +321,8 @@ int ArrayStack_Peek(const struct ArrayStack *stack, void *destAddr) {
 	
 	void *srcAddr = stack->_stack + (stack->_top - 1 * stack->_elemSize);
 	memcpy(destAddr, srcAddr, stack->_elemSize); // TODO: Check that memory doesn't overlap?
+	
+	return 0;
 }
 
 

@@ -24,6 +24,7 @@
 /*
 TODO: Shrink sql_command_buffer after realloc
 TODO: Test UTF-16, see sqlite3_column_bytes documentation
+TODO: Replace manual string logic with UTF-8 substring func, esp. wherever "len + 1" is done to prevent off by one errors
 */
 
 #include "sqlite-amalgamation-3510300/sqlite3.h" // -lpthread -ldl
@@ -57,12 +58,11 @@ int main(int argc, char** argv) {
 	}
 	
 	const short BUFFER_CHUNK = 64;
-	int curr_cmd_length = 0;
-	char *sql_command_part = NULL;
-	ssize_t line_length = 0;
 	struct sqlite3_stmt *stmt = NULL;
 	
 	// MALLOCs
+	
+	char *sql_command_part = NULL;
 	
 	int curr_buffer_size = BUFFER_CHUNK;
 	char *sql_command_buffer = malloc(curr_buffer_size);
@@ -79,10 +79,10 @@ int main(int argc, char** argv) {
 		return EXIT_FAILURE;
 	}
 	
-	size_t col_max_lengths_size = 16;
-	char *col_max_lengths = malloc(col_max_lengths_size);
-	if (!col_max_lengths) {
-		UtilsError("col_max_lengths malloc");
+	size_t col_max_disp_lengths_size = 16;
+	char *col_max_disp_lengths = malloc(col_max_disp_lengths_size);
+	if (!col_max_disp_lengths) {
+		UtilsError("col_max_disp_lengths malloc");
 		return EXIT_FAILURE;
 	}
 	
@@ -108,39 +108,44 @@ int main(int argc, char** argv) {
 	
 	printf("Input (\"EXIT;\" to exit): \n>");
 	
+	size_t line_size = 0;
+	int curr_cmd_length = 0;
 	bool finish_session = false;
 	do {
 		// Read a statement
 		bool finish_read = false;
 		ssize_t num_read;
 		do {
-			num_read = getline(&sql_command_part, &line_length, stdin); // MALLOC sql_command_part
+			num_read = getline(&sql_command_part, &line_size, stdin); // MALLOC sql_command_part
 			if (num_read == -1) {
 				UtilsError("getline");
 				main_ret = EXIT_FAILURE;
 				goto cleanup;
 			}
-			
-			while ((num_read + curr_cmd_length) > curr_buffer_size) {
+
+			if ((num_read + curr_cmd_length + 1) > curr_buffer_size) {
 				if (curr_buffer_size > (INT_MAX - BUFFER_CHUNK)) {
 					UtilsError("curr_buffer_size exceeds limit");
 					main_ret = EXIT_FAILURE;
 					goto cleanup;
 				}
-
-				curr_buffer_size += BUFFER_CHUNK;			
+				
+				curr_buffer_size = (num_read + curr_cmd_length + 1 + BUFFER_CHUNK) - \
+									(num_read + curr_cmd_length + 1 + BUFFER_CHUNK) % BUFFER_CHUNK;
 				if (!(sql_command_buffer = realloc(sql_command_buffer, curr_buffer_size))) {
 					UtilsError("realloc");
 					main_ret = EXIT_FAILURE;
 					goto cleanup;
 				}
 			}
-			strcat(sql_command_buffer, sql_command_part);
+			
+			assert(curr_buffer_size >= (num_read + curr_cmd_length + 1));
+			strlcat_s(sql_command_buffer, curr_buffer_size, curr_cmd_length, sql_command_part, num_read);
 			curr_cmd_length += num_read;
 			
-			free(sql_command_part);
+			free(sql_command_part); // FREE sql_command_part
 			sql_command_part = NULL;
-			line_length = 0;
+			line_size = 0;
 			
 			for (int i = curr_cmd_length - 1; i >= 0; --i) {
 				char c = sql_command_buffer[i];
@@ -162,7 +167,7 @@ int main(int argc, char** argv) {
 			finish_session = true;
 		} else {
 			// Parse statement
-			if (ret = sqlite3_prepare_v2(db, sql_command_buffer, curr_cmd_length, &stmt, NULL)) {
+			if ((ret = sqlite3_prepare_v2(db, sql_command_buffer, curr_cmd_length, &stmt, NULL))) {
 				printf("SQLite error: %s\n", sqlite3_errstr(ret));
 				
 			} else {
@@ -171,8 +176,10 @@ int main(int argc, char** argv) {
 				printf("\n");
 				
 				if (step_res == SQLITE_DONE || step_res == SQLITE_ROW) {
-					size_t new_length = 0;
-					char col_val[33] = "";
+					size_t new_size = 0;
+					size_t col_val_size = 32 * 4 + 1;
+					assert(col_val_size <= UCHAR_MAX); // For length in temp_result_str, final_result_str
+					char col_val[32 * 4 + 1] = {0};
 				
 					// See if there are results
 					int num_col = sqlite3_column_count(stmt);
@@ -189,13 +196,13 @@ int main(int argc, char** argv) {
 							}
 						}
 						
-						// Resize col_max_lengths
-						if (col_max_lengths_size < num_col || \
-							col_max_lengths_size > (num_col + 16)) {
-							col_max_lengths_size = ((num_col + 16) - \
+						// Resize col_max_disp_lengths
+						if (col_max_disp_lengths_size < num_col || \
+							col_max_disp_lengths_size > (num_col + 16)) {
+							col_max_disp_lengths_size = ((num_col + 16) - \
 								((num_col + 16) % 16));
-							if (!(col_max_lengths = realloc(col_max_lengths, col_max_lengths_size))) {
-								UtilsError("col_max_lengths realloc");
+							if (!(col_max_disp_lengths = realloc(col_max_disp_lengths, col_max_disp_lengths_size))) {
+								UtilsError("col_max_disp_lengths realloc");
 								main_ret = EXIT_FAILURE;
 								goto cleanup;
 							}	
@@ -230,38 +237,65 @@ int main(int argc, char** argv) {
 								goto cleanup;
 							}
 							
-							strncpy(col_val, sq3_col_name, 32);
-
-							// Shorten column name for display purposes
 							size_t col_name_len = strlen(sq3_col_name);
-							if (col_name_len >= 32) {
-								col_name_len = 32;
-								col_val[28] = '.';
-								col_val[29] = '.';
-								col_val[30] = '.';
-								col_val[31] = '\0';
+							size_t col_disp_name_len = utf8str_len(sq3_col_name, col_name_len + 1, &ret);
+							assert(ret >= 0);
+							if (col_disp_name_len > 32) {
+								col_disp_name_len = 32;
+								size_t count = 0;
+								size_t remaining_num_elem = col_val_size;
+								const char *curr_sql_ptr = sq3_col_name;
+								char *curr_col_val_ptr = col_val;
+								while (count < 32 - 3) {
+									char num_read = utf8str_iterate(curr_sql_ptr, remaining_num_elem);
+									if (num_read < 0) {
+										UtilsError("col_disp_name_len utf8str_iterate");
+										main_ret = EXIT_FAILURE;
+										goto cleanup;
+									}
+									ret = strncpy_s(curr_col_val_ptr, remaining_num_elem, curr_sql_ptr, num_read);
+									assert(ret == num_read);
+									remaining_num_elem -= num_read;
+									curr_sql_ptr += num_read;
+									curr_col_val_ptr += num_read;
+									
+									++count;
+								}
+								ret = strncpy_s(curr_col_val_ptr, remaining_num_elem, "...", 3);
+								assert(ret == 3);
+								col_name_len = strlen(col_val);
+								
+							} else {
+								ret = strncpy_s(col_val, col_val_size, sq3_col_name, col_name_len);
+								assert(ret == col_name_len);
 							}
-							col_max_lengths[i] = col_name_len;
+							assert(col_disp_name_len > 0 && col_disp_name_len <= 32);
+							assert(col_name_len > 0 && col_name_len < col_val_size);
+							
+							col_max_disp_lengths[i] = col_disp_name_len;
 							
 							// + 1 for col_name_len embedded within temp_result_str as a char
-							new_length = temp_result_str_len + 1 + col_name_len ;
-							if (new_length >= temp_result_str_size) {
-								temp_result_str_size = (new_length + BUFFER_CHUNK) - \
-									((new_length + BUFFER_CHUNK) % BUFFER_CHUNK);
+							// + 1 for \0
+							new_size = temp_result_str_len + 1 + col_name_len + 1;
+							if (new_size >= temp_result_str_size) {
+								temp_result_str_size = (new_size + BUFFER_CHUNK) - \
+									((new_size + BUFFER_CHUNK) % BUFFER_CHUNK);
 								if (!(temp_result_str = realloc(temp_result_str, temp_result_str_size))) {
 									UtilsError("temp_result_str realloc metadata col_val");
 									main_ret = EXIT_FAILURE;
 									goto cleanup;
 								}
 							}
+							
 							// col_name_len in temp_result_str decides how many bytes to read for the col_name
 							// when creating final_result_str
-							assert(col_name_len > 0 && col_name_len <= 32);
-							temp_result_str[temp_result_str_len] = (char) col_name_len;
+							assert(col_name_len > 0 && col_name_len <= UCHAR_MAX);
+							temp_result_str[temp_result_str_len] = (unsigned char) col_name_len;
 							temp_result_str[temp_result_str_len + 1] = '\0';
+							++temp_result_str_len;
 							
-							strcat(temp_result_str, col_val);
-							temp_result_str_len = new_length;
+							temp_result_str_len = strlcat_s(temp_result_str, temp_result_str_size, \
+															temp_result_str_len, col_val, col_name_len);
 						}
 
 						if (step_res == SQLITE_ROW) {
@@ -269,14 +303,15 @@ int main(int argc, char** argv) {
 							bool no_more_rows = false;
 							do {
 								for (int i = 0; i < num_col; ++i) {
-									const unsigned char * val_str = NULL;
-									int val_bytes = 0;
+									const char * val_str = NULL;
+									int txt_str_len = 0;
+									size_t disp_val_len = 0;
 									char col_type = col_data_types[i];
 									if (col_type == SQLITE_INTEGER || col_type == SQLITE_FLOAT || \
 										col_type == SQLITE_TEXT || col_type == SQLITE_NULL) {
 										// https://sqlite.org/c3ref/column_blob.html
-										const unsigned char * sq3_col_txt = \
-											sqlite3_column_text(stmt, i);
+										const char * sq3_col_txt = \
+											(const char *) sqlite3_column_text(stmt, i);
 										if (!sq3_col_txt) {
 											ret = sqlite3_errcode(db);
 											// ret is SQLITE_ROW when value is NULL
@@ -287,41 +322,84 @@ int main(int argc, char** argv) {
 											
 											} else {
 												val_str = NULL_STR;
-												val_bytes = strlen(NULL_STR);
+												txt_str_len = strlen(val_str);
+												disp_val_len = utf8str_len(val_str, txt_str_len + 1, &ret);
+												assert(ret >= 0);
 											}
 										} else {
-											val_bytes = sqlite3_column_bytes(stmt, i);
-											strncpy(col_val, sq3_col_txt, 32);
+											/*txt_str_len = sqlite3_column_bytes(stmt, i);
 											
-											if (val_bytes >= 32) {
-												val_bytes = 32;
+											if (txt_str_len >= 32) {
+												strncpy_s(col_val, 33, sq3_col_txt, 32 - 3);
+												// Shorten column name for display purposes
 												col_val[29] = '.';
 												col_val[30] = '.';
 												col_val[31] = '.';
 												col_val[32] = '\0';
+												txt_str_len = 32;
+											} else {
+												strncpy_s(col_val, 33, sq3_col_txt, txt_str_len);
+											}*/
+											
+											txt_str_len = sqlite3_column_bytes(stmt, i);
+											disp_val_len = utf8str_len(sq3_col_txt, txt_str_len + 1, &ret);
+											assert(ret >= 0);
+											if (disp_val_len > 32) {
+												disp_val_len = 32;
+												size_t count = 0;
+												size_t remaining_num_elem = col_val_size;
+												const char *curr_sql_ptr = sq3_col_txt;
+												char *curr_col_val_ptr = col_val;
+												while (count < 32 - 3) {
+													char num_read = utf8str_iterate(curr_sql_ptr, remaining_num_elem);
+													if (num_read < 0) {
+														UtilsError("col_disp_name_len utf8str_iterate");
+														main_ret = EXIT_FAILURE;
+														goto cleanup;
+													}
+													ret = strncpy_s(curr_col_val_ptr, remaining_num_elem,\
+																curr_sql_ptr, num_read);
+													assert(ret == num_read);
+													remaining_num_elem -= num_read;
+													curr_sql_ptr += num_read;
+													curr_col_val_ptr += num_read;
+													
+													++count;
+												}
+												ret = strncpy_s(curr_col_val_ptr, remaining_num_elem, "...", 3);
+												assert(ret == 3);
+												
+											} else {
+												ret = strncpy_s(col_val, col_val_size, sq3_col_txt, txt_str_len);
+												assert(ret == txt_str_len);
 											}
+											
 											val_str = col_val;
+											txt_str_len = strlen(col_val);
 										}
 										
 									} else if (col_type == SQLITE_BLOB) {
 										val_str = NOT_SUPPORTED_STR;
-										val_bytes = strlen(NOT_SUPPORTED_STR);
+										txt_str_len = strlen(val_str);
+										disp_val_len = utf8str_len(val_str, txt_str_len + 1, &ret);
+										assert(ret >= 0);
 									} else {
 										UtilsError("col_type");
 										main_ret = EXIT_FAILURE;
 										goto cleanup;
 									}
-									assert(val_bytes <= 32);
+									assert(disp_val_len <= 32); // can be 0 if empty string
+									assert(txt_str_len < col_val_size);
 									
-									if (val_bytes > col_max_lengths[i]) {
-										col_max_lengths[i] = val_bytes;
+									if (disp_val_len > col_max_disp_lengths[i]) {
+										col_max_disp_lengths[i] = disp_val_len;
 									}
 									
-									// + 1 for val_bytes embedded within temp_result_str
-									new_length = temp_result_str_len + 1 + val_bytes;
-									if (new_length >= temp_result_str_size) {
-										temp_result_str_size = (new_length + BUFFER_CHUNK) - \
-											((new_length + BUFFER_CHUNK) % BUFFER_CHUNK);
+									// + 1 for txt_str_len embedded within temp_result_str
+									new_size = temp_result_str_len + 1 + txt_str_len;
+									if (new_size >= temp_result_str_size) {
+										temp_result_str_size = (new_size + BUFFER_CHUNK) - \
+											((new_size + BUFFER_CHUNK) % BUFFER_CHUNK);
 										if (!(temp_result_str = \
 											realloc(temp_result_str, temp_result_str_size))) {
 											UtilsError("temp_result_str realloc metadata");
@@ -329,14 +407,17 @@ int main(int argc, char** argv) {
 											goto cleanup;
 										}
 									}
-									// val_bytes in temp_result_str decides how many bytes to read
-									// for the value when creating final_result_str
-									// + 1 for when val_bytes is 0; conflicts with \0
-									temp_result_str[temp_result_str_len] = (char) val_bytes + 1;
-									temp_result_str[temp_result_str_len + 1] = '\0';
 									
-									strcat(temp_result_str, val_str);
-									temp_result_str_len = new_length;
+									// txt_str_len in temp_result_str decides how many bytes to read
+									// for the value when creating final_result_str
+									// + 1 for when txt_str_len is 0; conflicts with \0
+									assert(txt_str_len <= UCHAR_MAX);
+									temp_result_str[temp_result_str_len] = (unsigned char) txt_str_len;
+									temp_result_str[temp_result_str_len + 1] = '\0';
+									++temp_result_str_len;
+									
+									temp_result_str_len = strlcat_s(temp_result_str, temp_result_str_size, \
+													temp_result_str_len, val_str, txt_str_len);
 								}
 								
 								ret = sqlite3_step(stmt);
@@ -352,6 +433,7 @@ int main(int argc, char** argv) {
 										goto cleanup;
 										break;
 								}
+									
 							} while (!no_more_rows);
 						}
 						
@@ -367,24 +449,44 @@ int main(int argc, char** argv) {
 						// Build column name row
 						size_t trs_idx = 0;
 						for (int i = 0; i < num_col; ++i) {
-							char col_max_len = col_max_lengths[i];
-							char val_len = temp_result_str[trs_idx];
+							char col_max_disp_len = col_max_disp_lengths[i];
+							unsigned char val_len = temp_result_str[trs_idx];
 							++trs_idx;
-							int j = 0;
-							for (; j < val_len; ++j) {
-								final_result_str[final_result_str_len] = temp_result_str[trs_idx];
-								++trs_idx;
-								
-								++final_result_str_len;
-								if (!(final_result_str = realloc_if_needed(final_result_str,  \
-									&final_result_str_size, &final_result_str_len, BUFFER_CHUNK))) {
-									UtilsError("final_result_str realloc col name");
+							size_t disp_val_len = utf8str_len(temp_result_str + trs_idx, \
+								val_len + 1, &ret);
+							assert(ret >= 0);
+							
+							// Copy name into final result str
+							if (final_result_str_len + val_len > final_result_str_size - 1) {
+								final_result_str_size = (final_result_str_size + val_len + BUFFER_CHUNK) - \
+									(final_result_str_size + val_len + BUFFER_CHUNK) % BUFFER_CHUNK;
+									
+								final_result_str = realloc(final_result_str, final_result_str_size);
+								if (!final_result_str) {
+									UtilsError("final_result_str realloc col");
+									main_ret = EXIT_FAILURE;
+									goto cleanup;
+								}
+							}
+							ret = strncpy_s(final_result_str + final_result_str_len, \
+								 	final_result_str_size - final_result_str_len, temp_result_str + trs_idx, val_len);
+						 	assert(ret == val_len);
+						 	final_result_str_len += val_len;
+						 	trs_idx += val_len;
+							
+							if (final_result_str_size - 1 == final_result_str_len) {
+								final_result_str_size = (final_result_str_size + BUFFER_CHUNK) - \
+									(final_result_str_size + BUFFER_CHUNK) % BUFFER_CHUNK;
+								final_result_str = realloc(final_result_str, final_result_str_size);
+								if (!final_result_str) {
+									UtilsError("final_result_str realloc size check");
 									main_ret = EXIT_FAILURE;
 									goto cleanup;
 								}
 							}
 							
-							for (; j < col_max_len; ++j) {
+							// Whitespace
+							for (int j = disp_val_len; j < col_max_disp_len; ++j) {
 								final_result_str[final_result_str_len] = ' ';
 								++final_result_str_len;
 								
@@ -417,29 +519,45 @@ int main(int argc, char** argv) {
 						// Build value rows
 						while (trs_idx < temp_result_str_len) {
 							for (int i = 0; i < num_col; ++i) {
-								char col_max_len = col_max_lengths[i];
-								// - 1 to undo workaround for when val_bytes was 0
-								char val_len = temp_result_str[trs_idx] - 1;
+								char col_max_disp_len = col_max_disp_lengths[i];
+								// - 1 to undo workaround for when txt_str_len was 0
+								unsigned char val_len = temp_result_str[trs_idx];
 								++trs_idx;
-								int j = 0;
-								if (val_len) {
-									for (; j < val_len; ++j) {
-										final_result_str[final_result_str_len] = \
-											temp_result_str[trs_idx];
-										++trs_idx;
-										++final_result_str_len;
+								size_t disp_val_len = utf8str_len(temp_result_str + trs_idx, \
+																	val_len + 1, &ret);
+								assert(ret >= 0);							
+								
+								// Copy name into final result str
+								if (final_result_str_len + val_len > final_result_str_size - 1) {
+									final_result_str_size = (final_result_str_size + val_len + BUFFER_CHUNK) - \
+										(final_result_str_size + val_len + BUFFER_CHUNK) % BUFFER_CHUNK;
 										
-										if (!(final_result_str = realloc_if_needed( \
-											final_result_str, &final_result_str_size, \
-											&final_result_str_len, BUFFER_CHUNK))) {
-											UtilsError("final_result_str realloc val name");
-											main_ret = EXIT_FAILURE;
-											goto cleanup;
-										}
+									final_result_str = realloc(final_result_str, final_result_str_size);
+									if (!final_result_str) {
+										UtilsError("final_result_str realloc val");
+										main_ret = EXIT_FAILURE;
+										goto cleanup;
+									}
+								}
+								ret = strncpy_s(final_result_str + final_result_str_len, \
+									 	final_result_str_size - final_result_str_len, temp_result_str + trs_idx, val_len);
+							 	assert(ret == val_len);
+							 	final_result_str_len += val_len;
+							 	trs_idx += val_len;
+								
+								if (final_result_str_size - 1 == final_result_str_len) {
+									final_result_str_size = (final_result_str_size + BUFFER_CHUNK) - \
+										(final_result_str_size + BUFFER_CHUNK) % BUFFER_CHUNK;
+									final_result_str = realloc(final_result_str, final_result_str_size);
+									if (!final_result_str) {
+										UtilsError("final_result_str realloc size check");
+										main_ret = EXIT_FAILURE;
+										goto cleanup;
 									}
 								}
 								
-								for (; j < col_max_len; ++j) {
+								// Whitespace
+								for (int j = disp_val_len; j < col_max_disp_len; ++j) {
 									final_result_str[final_result_str_len] = ' ';
 									++final_result_str_len;
 									
@@ -461,6 +579,7 @@ int main(int argc, char** argv) {
 									main_ret = EXIT_FAILURE;
 									goto cleanup;
 								}
+								
 							}
 							final_result_str[final_result_str_len] = '\n';
 							++final_result_str_len;
@@ -500,10 +619,10 @@ int main(int argc, char** argv) {
 	cleanup:
 	
 	if (stmt) {
-		if(ret = sqlite3_finalize(stmt)) UtilsError(sqlite3_errstr(ret));
+		if((ret = sqlite3_finalize(stmt))) UtilsError(sqlite3_errstr(ret));
 	}
 	
-	if (ret = sqlite3_close(db)) {
+	if ((ret = sqlite3_close(db))) {
 		fprintf(stderr, "cleanup sqlite3_close");
 		UtilsError(sqlite3_errstr(ret));
 	}
@@ -517,8 +636,8 @@ int main(int argc, char** argv) {
 	if (col_data_types) free(col_data_types);
 	col_data_types = NULL;
 	
-	if (col_max_lengths) free (col_max_lengths);
-	col_max_lengths = NULL;
+	if (col_max_disp_lengths) free (col_max_disp_lengths);
+	col_max_disp_lengths = NULL;
 	
 	if (temp_result_str) free(temp_result_str);
 	temp_result_str = NULL;
