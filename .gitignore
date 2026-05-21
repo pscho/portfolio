@@ -2,3 +2,6 @@
 */*.db
 sqlite_terminal/sqlite-amalgamation*
 sqlite_terminal/sqlite_terminal
+dotnet_spa
+*.sql
+
