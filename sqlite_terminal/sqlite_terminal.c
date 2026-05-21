@@ -328,20 +328,6 @@ int main(int argc, char** argv) {
 												assert(ret >= 0);
 											}
 										} else {
-											/*txt_str_len = sqlite3_column_bytes(stmt, i);
-											
-											if (txt_str_len >= 32) {
-												strncpy_s(col_val, 33, sq3_col_txt, 32 - 3);
-												// Shorten column name for display purposes
-												col_val[29] = '.';
-												col_val[30] = '.';
-												col_val[31] = '.';
-												col_val[32] = '\0';
-												txt_str_len = 32;
-											} else {
-												strncpy_s(col_val, 33, sq3_col_txt, txt_str_len);
-											}*/
-											
 											txt_str_len = sqlite3_column_bytes(stmt, i);
 											disp_val_len = utf8str_len(sq3_col_txt, txt_str_len + 1, &ret);
 											assert(ret >= 0);
