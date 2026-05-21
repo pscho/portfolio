@@ -397,7 +397,6 @@ int main(int argc, char** argv) {
 									
 									// txt_str_len in temp_result_str decides how many bytes to read
 									// for the value when creating final_result_str
-									// + 1 for when txt_str_len is 0; conflicts with \0
 									assert(txt_str_len <= UCHAR_MAX);
 									temp_result_str[temp_result_str_len] = (unsigned char) txt_str_len;
 									temp_result_str[temp_result_str_len + 1] = '\0';
@@ -507,7 +506,6 @@ int main(int argc, char** argv) {
 						while (trs_idx < temp_result_str_len) {
 							for (int i = 0; i < num_col; ++i) {
 								char col_max_disp_len = col_max_disp_lengths[i];
-								// - 1 to undo workaround for when txt_str_len was 0
 								unsigned char val_len = temp_result_str[trs_idx];
 								++trs_idx;
 								size_t disp_val_len = utf8str_len(temp_result_str + trs_idx, \
