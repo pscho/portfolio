@@ -43,6 +43,8 @@
 
 extern const void *VOID_PTR;
 
+extern const short LOG_LEVEL;
+
 struct ArrayStack {
 	void *_stack;
 	size_t _elemSize;
@@ -87,7 +89,7 @@ char utf8str_iterate(char const * const str, size_t const remainingNumElem);
 	Does not include the ending null character in the count.
 	errCode is set to -1 if the string does not end with a null term, 0 otherwise.
 	
-	ex: utf8str_len("aՀ桁ᐰ🁀🁰") -> returns 6
+	ex: utf8str_len("aՀ桁ᐰ🁀🁰", 18, &errCode) -> returns 6 // TODO: Check
 */
 size_t utf8str_len(char const * const str, size_t const numElem, int * const errCode);
 
@@ -113,6 +115,10 @@ bool ArrayStack_IsEmpty(const struct ArrayStack *stack);
 
 // Must be called to free memory allocated in arrayStackInit.
 void ArrayStack_Free(struct ArrayStack *stack);
+
+size_t ArrayStack_Count(struct ArrayStack *stack);
+
+void ArrayStack_Debug_Print(const struct ArrayStack * const stack);
 
 // JSON functions
 

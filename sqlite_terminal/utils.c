@@ -89,6 +89,10 @@ void UtilsError(const char *msg) {
 		fprintf(stderr, "%s\n", symbols[i]);
 	}
 	
+	if (LOG_LEVEL >= 7) {
+		assert(2 + 2 == 5); // Trigger error
+	}
+	
 	free(symbols);
 	return;	
 }
@@ -359,6 +363,27 @@ bool ArrayStack_IsEmpty(const struct ArrayStack *stack) {
 void ArrayStack_Free(struct ArrayStack *stack) {
 	free(stack->_stack);
 	stack->_stack = NULL;	
+}
+
+
+size_t ArrayStack_Count(struct ArrayStack *stack) {
+	return stack->_top;
+}
+
+
+void ArrayStack_Debug_Print(const struct ArrayStack * const stack) {
+	short maxWidth = 6;
+	short currWidth = 0;
+	
+	for (int i = 0; i < stack->_top * stack->_elemSize; ++i) {
+		if (currWidth == 6) {
+			printf("\n");
+			currWidth = 0;
+		}
+		
+		printf("%X ", *((char *) (stack->_stack) + i));
+		++currWidth;
+	}
 }
 
 
