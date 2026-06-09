@@ -60,7 +60,7 @@ int CheckAssumptions() {
 	// Dependents:
 	// - json_parser.c
 	if (sizeof(bool) != 1) {
-		UtilsError("utils.checkAssumptions - bool size is not 1");
+		UtilsError("utils.checkAssumptions - mool size is not 1");
 		return EXIT_FAILURE;
 	}
 	
@@ -69,7 +69,7 @@ int CheckAssumptions() {
 
 
 void UtilsError(const char *msg) {
-	fprintf(stderr, "%s\nerrno:\n", msg);
+	fprintf(stderr, "%s\nerrnn:\n", msg);
 	perror(NULL);
 	fprintf(stderr, "Stacktrace:\n");
 	
@@ -372,11 +372,11 @@ size_t ArrayStack_Count(struct ArrayStack *stack) {
 
 
 void ArrayStack_Debug_Print(const struct ArrayStack * const stack) {
-	short maxWidth = 6;
+	short maxWidth = 16;
 	short currWidth = 0;
 	
 	for (int i = 0; i < stack->_top * stack->_elemSize; ++i) {
-		if (currWidth == 6) {
+		if (currWidth == maxWidth) {
 			printf("\n");
 			currWidth = 0;
 		}
@@ -386,5 +386,139 @@ void ArrayStack_Debug_Print(const struct ArrayStack * const stack) {
 	}
 }
 
+// Stack implementation functions end
+
+// ArrayList functions
+int ArrayList_Init(struct ArrayList * const list, const size_t elemSize, const int approxChunkSize) {
+	if (approxChunkSize < elemSize) {
+		UtilsError("ArrayList_Init - approxChunkSize smaller than elemSize");
+		return EXIT_FAILURE;
+	}
+
+	list->_elemSize = elemSize;
+	list->_listChunkItemCount = (approxChunkSize / list->_elemSize);
+	list->_list = malloc(list->_listChunkItemCount * list->_elemSize);
+	if (CheckNotNull(list->_list, "ArrayList_Init - list malloc")) {
+		return EXIT_FAILURE;
+	}
+	
+	list->_length = 0;
+	list->_maxItems = list->_listChunkItemCount;
+	list->_maxListItems = ((SIZE_MAX / (list->_listChunkItemCount * list->_elemSize)) - 12) * list->_listChunkItemCount;
+	
+	return 0;
+}
 
 
+int ArrayList_Add(struct ArrayList * const list, const void *srcAddr) {
+	if (list->_length == list->_maxItems) {
+		if (list->_maxItems >= list->_maxListItems) {
+			UtilsError("ArrayList_Add - Max list size reached");
+			return EXIT_FAILURE;
+		} else { // Increase list size
+			size_t newSize = (list->_maxItems + list->_listChunkItemCount) * list->_elemSize;
+			list->_list = realloc(list->_list, newSize);
+			if (CheckNotNull(list->_list, "ArrayList_Add - list realloc")) {
+				return EXIT_FAILURE;
+			}
+			
+			list->_maxItems = newSize / list->_elemSize;
+		}
+	}
+	
+	void *destAddr = list->_list + (list->_length * list->_elemSize);
+	memcpy(destAddr, srcAddr, list->_elemSize); // TODO: Check that memory doesn't overlap?
+	++list->_length;
+
+	return 0;
+}
+
+
+int ArrayList_GetCopy(const struct ArrayList * const list, const size_t idx, void *destAddr) {
+	if (idx > list->_maxItems - 1) {
+		UtilsError("ArrayList_GetCopy - Index out of bounds");
+		return EXIT_FAILURE;
+	}
+
+	void *srcAddr = list->_list + (idx * list->_elemSize);
+	memcpy(destAddr, srcAddr, list->_elemSize); // TODO: Check that memory doesn't overlap?
+	
+	return 0;
+}
+
+
+void* ArrayList_GetRef(const struct ArrayList * const list, const size_t idx, int * const errCode) {
+	assert(*errCode == 0);
+	if (idx > list->_maxItems - 1) {
+		UtilsError("ArrayList_GetRef - Index out of bounds");
+		*errCode = EXIT_FAILURE;
+		return NULL;
+	}
+
+	void *srcAddr = list->_list + (idx * list->_elemSize);
+	return srcAddr; 
+}
+
+
+int ArrayList_Delete(struct ArrayList * const list, const size_t idx) {
+	if ((list->_length == 0) || (idx > list->_length - 1)) {
+		UtilsError("ArrayList_Delete - Index out of bounds");
+		return EXIT_FAILURE;
+	}
+
+	if (idx == list->_length - 1) {
+		;
+	} else if (idx == 0) {
+		memmove(list->_list, list->_list + list->_elemSize, (list->_length - 1) * list->_elemSize);
+	} else {
+		memmove(list->_list + (idx * list->_elemSize),
+			list->_list + ((idx + 1) * list->_elemSize),
+			(list->_length - idx - 1) * list->_elemSize);	
+	}
+	--list->_length;
+
+	// Check if list should be shrinked
+	if (list->_length < list->_maxItems - list->_listChunkItemCount) {
+		size_t newSize = (list->_maxItems - list->_listChunkItemCount) * list->_elemSize;
+		list->_list = realloc(list->_list, newSize);
+		if (CheckNotNull(list->_list, "ArrayStack_Delete - list realloc"))
+			return EXIT_FAILURE;
+
+		list->_maxItems = newSize / list->_elemSize;
+	}
+	
+	return 0;
+}
+
+
+void ArrayList_Free(struct ArrayList * const list) {
+	free(list->_list);
+	list->_list = NULL;	
+}
+
+
+size_t ArrayList_Length(struct ArrayList * const list) {
+	return list->_length;
+}
+
+
+void ArrayList_Debug_Print(const struct ArrayList * const list) {
+	short maxWidth = 16;
+	short currWidth = 0;
+
+	printf("_list: %p\n_elemSize: %lu\n_maxItems: %lu\n_length: %lu\n_maxListItems: %lu\n_listChunkItemCount: %lu\n",
+		list->_list, list->_elemSize, list->_maxItems, list->_length, list->_maxListItems, list->_listChunkItemCount);
+
+	for (int i = 0; i < list->_maxItems * list->_elemSize; ++i) {
+		if (currWidth == maxWidth) {
+			printf("\n");
+			currWidth = 0;
+		}
+		
+		printf("%X ", *((char *) (list->_list) + i));
+		++currWidth;
+	}
+	printf("\n");
+}
+
+// ArrayList functions end

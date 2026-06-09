@@ -1,3 +1,8 @@
+#ifndef UTILS_H
+#define UTILS_H
+
+// [] TODO: Comments
+// [] TODO: Make ArrayList and ArrayStack functions consistent
 // [] TODO: Verify stack is initialized when calling stackFree?
 // [] TODO: Ideas from Jon Blow talk: https://youtu.be/TH9VCN6UkyQ?si=EzkRWO1g49Hpo6rg&t=2687
 //	Follow multiple return values pattern (errcode parameter for functions)
@@ -10,7 +15,6 @@
 //		. vs ->; maybe always use ->?
 //		Optional types (Null checking/? types): Don't force them; maybe a preprocessor that adds not null asserts?
 
-
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -19,15 +23,9 @@
 #include <execinfo.h>
 #include <string.h>
 #include <errno.h>
+
+#define NDEBUG
 #include <assert.h>
-
-#ifdef UTILS_H
-#error "utils.h already defined"
-#endif
-
-#ifndef UTILS_H
-
-#define UTILS_H
 
 #define BYTE_TO_BINARY_PATTERN "%c%c%c%c%c%c%c%c"
 #define BYTE_TO_BINARY(byte)  \
@@ -40,6 +38,7 @@
 	((byte) & 0x02 ? '1' : '0'), \
 	((byte) & 0x01 ? '1' : '0')
 
+#define CHECK(goto_label) if (ret != 0) goto goto_label;
 
 extern const void *VOID_PTR;
 
@@ -54,6 +53,14 @@ struct ArrayStack {
 	size_t _stackChunkSize;
 };
 
+struct ArrayList {
+	void *_list;
+	size_t _elemSize;
+	size_t _maxItems;
+	size_t _length;
+	size_t _maxListItems;
+	size_t _listChunkItemCount;
+};
 
 struct JsonObject {
 	char *_typePtr;
@@ -97,6 +104,7 @@ size_t utf8str_len(char const * const str, size_t const numElem, int * const err
 
 void *realloc_if_needed(void *ptr, size_t * const curr_size, size_t const * const curr_len, int const block_size);
 
+
 // Stack implementation functions
 
 // Allocates dynamic memory (malloc) for a stack holding elements of [size] size.
@@ -119,6 +127,26 @@ void ArrayStack_Free(struct ArrayStack *stack);
 size_t ArrayStack_Count(struct ArrayStack *stack);
 
 void ArrayStack_Debug_Print(const struct ArrayStack * const stack);
+
+
+// ArrayList functions
+
+int ArrayList_Init(struct ArrayList * const list, const size_t elemSize, const int approxChunkSize);
+
+int ArrayList_Add(struct ArrayList * const list, const void *srcAddr);
+
+int ArrayList_GetCopy(const struct ArrayList * const list, const size_t idx, void *destAddr);
+
+void* ArrayList_GetRef(const struct ArrayList * const list, const size_t idx, int * const errCode);
+
+int ArrayList_Delete(struct ArrayList * const list, const size_t idx);
+
+void ArrayList_Free(struct ArrayList * const list); 
+
+size_t ArrayList_Length(struct ArrayList * const list); 
+
+void ArrayList_Debug_Print(const struct ArrayList * const list); 
+
 
 // JSON functions
 
