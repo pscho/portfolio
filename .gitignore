@@ -7,4 +7,5 @@ sqlite_terminal/sqlite3.h
 sqlite_terminal/sqlite_terminal
 dotnet_spa
 *.sql
+json_parser/print_all
 

@@ -24,7 +24,7 @@
 #include <string.h>
 #include <errno.h>
 
-#define NDEBUG
+// Can be disabled using -DNDEBUG
 #include <assert.h>
 
 #define BYTE_TO_BINARY_PATTERN "%c%c%c%c%c%c%c%c"

@@ -1,0 +1,33 @@
+	{pairs: 
+		[
+			{b: long double 5.230000, y0: long double -44.405186, x1: long double 148.028946, y1: long double 0.012312, }
+		
+			{: long double -0.419127, y0: long double 77.895470, x1: str abcdefghijklmnopqrstuvwxyz., y1: long double -26.495466, }
+		
+			{x0: bool 0, y0: bool 1, x1: long 22, y1: long 12, }
+		
+			{x0: long 16820, y0: long -6810, x1: long 5028050101629, y1: long -29759291372493, }
+		
+			{x0: long double 23402359292340234.242188, y0: str sdfsdfsf, x1: NULL, y1: long double 2.387017, }
+		
+			{x0: long double 132.609573, y0: long double 22.697874, x1: long double 84.391121, y1: long double 44.271000, }
+		
+			{x0: long double 598129859012895038528097371201741583810560.000000, y0: long double 28.710634, x1: 
+				[long 1, long 2, str sdf, ]
+			y1: long double 38.640442, }
+		
+			{x0: long double 96.020889, y0: long double 66.287903, x1: long double 100.615364, y1: NULL, }
+		
+			{: long double 44.970474, y0: long double -44.923332, : long double -2.715943, y1: long double -1.694319, }
+		
+			{x0: long double 32.290100, y0: long double -47.105103, x1: long double 17.051601, y1: 
+				[long 1, long 2, long 3, 
+					[long 5, long 6, 
+						{a: long 5, c: 
+							[long 6, long 2, long 1, ]
+						}
+					]
+				]
+			}
+		]
+	}

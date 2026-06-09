@@ -13,8 +13,6 @@
 
 #include "json_parser.h"
 
-const short LOG_LEVEL = 6;
-
 const size_t PARSER_ARRAY_BLOCK_SIZE = 512;
 
 const size_t PARSER_KEY_ID_ARRAY_BLOCK_SIZE = 64;
@@ -139,6 +137,14 @@ int UpdateByteArray(struct Parser *parser, unsigned char byteVal) {
 }
 
 
+void ResetByteArray(struct Parser *parser) {
+	parser->byteArr[0] = '\0';
+	parser->byteArrIdx = 0;
+
+	return;
+}
+
+
 int UpdateAddrArray(struct Parser *parser, void *addr) {
 	parser->addrArr[parser->addrArrIdx] = addr;
 	++parser->addrArrIdx;
@@ -189,6 +195,9 @@ int ParseKeyIdToParseKeyIdFinish(struct Parser *parser) {
 
 
 int ParseNumber(struct Parser *parser) {
+	assert(parser->state == PARSE_NUMBER_INTEGRAL ||
+		parser->state == PARSE_NUMBER_INTEGRAL_ZERO ||
+		parser->state == PARSE_NUMBER_FRACTIONAL);
 	// Temporary add \0 so that strtold parsing will end at that position.
 	// The index where this temporary \0 is added will be replaced by a value of
 	// enum CDataType indicating the data type of the value, followed by a
@@ -205,62 +214,79 @@ int ParseNumber(struct Parser *parser) {
 	
 	// Parse number from string value
 	if (CheckNotZero(errno, "json_parser ParseNumber errno check")) return EXIT_FAILURE;
-	char *temp;
-	long double initialParsedVal = strtold((char *) parser->byteArr + parser->byteArrIdx, &temp);
-	if (errno || *temp != '\0') {
-		UtilsError("json_parser ParseNumber strtold");
-		return EXIT_FAILURE;
-	}
-	
-	// Check value and decrease allocated memory size from long double to a smaller data type if possible
-	long double fractional, integral;
-	fractional = modfl(initialParsedVal, &integral); // No infinity or NaN numeric values supported!
-	enum ParserDataType parsedValueType = JP_LONG_DOUBLE;
-	if (fractional == 0.0) { // Floating point so very small fractional values can still equal zero!
-		if (integral <= CHAR_MAX && integral >= CHAR_MIN) {
-			parsedValueType = JP_S_CHAR;
-		} else if (integral <= INT_MAX && integral >= INT_MIN) {
-			parsedValueType = JP_S_INT;
-		} else if (integral <= LONG_MAX && integral >= LONG_MIN) {
-			parsedValueType = JP_S_LONG;
-		}
-	} else if (initialParsedVal <= FLT_MAX && initialParsedVal >= -FLT_MAX) {
-		parsedValueType = JP_FLOAT;
-	}
-	
-	// Replace string value with numeric value
-	char numBytes;
-	unsigned char *convertedParsedValPtr;
-	switch (parsedValueType) {
-		case JP_S_CHAR:
-			numBytes = 1;
-			char charParsedVal = (char) initialParsedVal;
-			convertedParsedValPtr = (unsigned char*) &charParsedVal;
-			break;
-		case JP_S_INT:
-			numBytes = 4;
-			int intParsedVal = (int) initialParsedVal;
-			convertedParsedValPtr = (unsigned char*) &intParsedVal;
-			break;
-		case JP_S_LONG:
-			numBytes = 8;
-			long longParsedVal = (long) initialParsedVal;
-			convertedParsedValPtr = (unsigned char*) &longParsedVal;
-			break;
-		case JP_FLOAT:
-			numBytes = 4;
-			float floatParsedVal = (float) initialParsedVal;
-			convertedParsedValPtr = (unsigned char*) &floatParsedVal;
-			break;
-		case JP_LONG_DOUBLE:
-			numBytes = 16;
-			convertedParsedValPtr = (unsigned char*) &initialParsedVal;
-			break;
-		default:
-			UtilsError("json_parser ParseNumber switch parsed value");
+	char *temp = NULL;
+	unsigned char *convertedParsedValPtr = NULL;
+	unsigned char numBytes;
+	enum ParserDataType parsedValueType;
+	if (parser->state == PARSE_NUMBER_INTEGRAL || parser->state == PARSE_NUMBER_INTEGRAL_ZERO) {
+		long long int initialParsedVal = strtoll((char*) parser->byteArr + parser->byteArrIdx, &temp, 10);
+		if (errno || *temp != '\0') {
+			UtilsError("json_parser ParseNumber strtold");
 			return EXIT_FAILURE;
-	}
-	
+		}	
+		convertedParsedValPtr = (unsigned char*) &initialParsedVal;
+		numBytes = sizeof(long long int);
+		parsedValueType = JP_S_LONG;
+	} else {
+		long double initialParsedVal = strtold((char *) parser->byteArr + parser->byteArrIdx, &temp);
+		if (errno || *temp != '\0') {
+			UtilsError("json_parser ParseNumber strtold");
+			return EXIT_FAILURE;
+		}
+		convertedParsedValPtr = (unsigned char*) &initialParsedVal;
+		numBytes = sizeof(long double);
+		parsedValueType = JP_LONG_DOUBLE;
+
+		/*
+		// Check value and decrease allocated memory size from long double to a smaller data type if possible
+		long double fractional, integral;
+		fractional = modfl(initialParsedVal, &integral); // No infinity or NaN numeric values supported!
+		enum ParserDataType parsedValueType = JP_LONG_DOUBLE;
+		if (fractional == 0.0) { // Floating point so very small fractional values can still equal zero!
+			if (integral <= CHAR_MAX && integral >= CHAR_MIN) {
+				parsedValueType = JP_S_CHAR;
+			} else if (integral <= INT_MAX && integral >= INT_MIN) {
+				parsedValueType = JP_S_INT;
+			} else if (integral <= LONG_MAX && integral >= LONG_MIN) {
+				parsedValueType = JP_S_LONG;
+			}
+		} else if (initialParsedVal <= FLT_MAX && initialParsedVal >= -FLT_MAX) {
+			parsedValueType = JP_FLOAT;
+		}
+		
+		// Replace string value with numeric value
+		char numBytes;
+		switch (parsedValueType) {
+			case JP_S_CHAR:
+				numBytes = 1;
+				char charParsedVal = (char) initialParsedVal;
+				convertedParsedValPtr = (unsigned char*) &charParsedVal;
+				break;
+			case JP_S_INT:
+				numBytes = 4;
+				int intParsedVal = (int) initialParsedVal;
+				convertedParsedValPtr = (unsigned char*) &intParsedVal;
+				break;
+			case JP_S_LONG:
+				numBytes = 8;
+				long longParsedVal = (long) initialParsedVal;
+				convertedParsedValPtr = (unsigned char*) &longParsedVal;
+				break;
+			case JP_FLOAT:
+				numBytes = 4;
+				float floatParsedVal = (float) initialParsedVal;
+				convertedParsedValPtr = (unsigned char*) &floatParsedVal;
+				break;
+			case JP_LONG_DOUBLE:
+				numBytes = 16;
+				convertedParsedValPtr = (unsigned char*) &initialParsedVal;
+				break;
+			default:
+				UtilsError("json_parser ParseNumber switch parsed value");
+				return EXIT_FAILURE;
+		}*/
+	}	
+		
 	for (int i = 0; i < numBytes; ++i) {
 		if (UpdateByteArray(parser, *convertedParsedValPtr)) return EXIT_FAILURE;
 		++convertedParsedValPtr;
@@ -404,8 +430,10 @@ int _IterateParser(struct Parser *parser) {
 		}
 	}
 	
-	//printf("char: %c colNum: %ld\n", nextChar, parser->colNum);
-	
+#ifdef DEBUG
+	printf("char: %c colNum: %ld\n", nextChar, parser->colNum);
+#endif
+
 	if (nextChar == 10) { // Line feed
 		++parser->lineNum;
 		parser->colNum = 0;
@@ -811,17 +839,17 @@ int _IterateParser(struct Parser *parser) {
 	ret = 0;
 	if (updateStateOnly != PARSE_NULL_STATE) {
 		assert(updateStateAndByteArray == PARSE_NULL_STATE &&
-				transition == TO_SAME_STATE_DEFAULT);
+			transition == TO_SAME_STATE_DEFAULT);
 		parser->state = updateStateOnly;
 	} else if (updateStateAndByteArray != PARSE_NULL_STATE) {
 		assert(updateStateOnly == PARSE_NULL_STATE &&
-				transition == TO_SAME_STATE_DEFAULT);
+			transition == TO_SAME_STATE_DEFAULT);
 		if (!parser->iterateOnly)
 			ret = UpdateByteArray(parser, nextChar);
 		parser->state = updateStateAndByteArray;
 	} else {
 		assert(updateStateOnly == PARSE_NULL_STATE &&
-				updateStateAndByteArray == PARSE_NULL_STATE);
+			updateStateAndByteArray == PARSE_NULL_STATE);
 		switch (transition) {
 			case TO_SAME_STATE_DEFAULT:
 				switch (parser->state) {
@@ -1017,7 +1045,7 @@ bool IsJustStartedParsingFirstValue(enum ParserState state) {
 
 /* Interface functions start */
 
-
+// TODO: Need assertions for value of byteArrIdx and byteArr where possible
 void _CheckParserInterfaceState(struct ParserInterface *interface) {
 	struct Parser *parser = &interface->_parser;
 	
@@ -1339,7 +1367,6 @@ int _IterateParserInterface(struct ParserInterface *interface, const enum Parser
 				parser->iterateOnly
 				parser->byteArr (Reset only)
 				parser->byteArrIdx (Reset only)
-				parser->byteArrMaxItems (Reset only)
 				
 		*/
 		enum ParserState tempState = PARSE_NULL_STATE;
@@ -1387,6 +1414,7 @@ int _IterateParserInterface(struct ParserInterface *interface, const enum Parser
 						} else {
 							assert(parser->iterateOnly == true);
 							if (!interface->skip)
+								ResetByteArray(parser);
 								parser->iterateOnly = false;
 						}
 						
@@ -1508,6 +1536,7 @@ int _IterateParserInterface(struct ParserInterface *interface, const enum Parser
 				break;
 			case OBJ_EXPANDED_TO_HAS_NEXT_X:
 				assert(*ps == PARSE_OBJECT_OPEN_CURLY_BRACE);
+				ResetByteArray(parser);
 				while (*ps == PARSE_OBJECT_OPEN_CURLY_BRACE) {
 					if ((ret = _IterateParser(parser))) {
 						break;
@@ -1519,6 +1548,7 @@ int _IterateParserInterface(struct ParserInterface *interface, const enum Parser
 					switch (*ps) {
 						case PARSE_KEY_ID:
 							if (!interface->skip)
+								ResetByteArray(parser);
 								parser->iterateOnly = false;
 							interface->_state = PARSER_INTERFACE_HAS_NEXT_TRUE;
 							break;
@@ -1534,6 +1564,7 @@ int _IterateParserInterface(struct ParserInterface *interface, const enum Parser
 				break;
 			case ARR_EXPANDED_TO_HAS_NEXT_X:
 				if (!interface->skip)
+					ResetByteArray(parser);
 					parser->iterateOnly = false;
 				tempState = *ps;
 				while (*ps == tempState) {
@@ -1596,6 +1627,7 @@ int _IterateParserInterface(struct ParserInterface *interface, const enum Parser
 						if (*ps == BEGIN_VALUE_PARSE) {
 							assert(parser->isParsingArray);
 							if (!interface->skip)
+								ResetByteArray(parser);
 								parser->iterateOnly = false;
 						}
 						interface->_state = PARSER_INTERFACE_HAS_NEXT_TRUE;
@@ -1615,6 +1647,7 @@ int _IterateParserInterface(struct ParserInterface *interface, const enum Parser
 					if (*ps == BEGIN_VALUE_PARSE) {
 						assert(parser->isParsingArray);
 						if (!interface->skip)
+							ResetByteArray(parser);
 							parser->iterateOnly = false;
 					}
 					interface->_state = PARSER_INTERFACE_HAS_NEXT_TRUE;
@@ -2618,7 +2651,6 @@ int JsonParser_Init(struct ParserInterface *parserInterface, char *filePath) {
 	parser->byteArrMaxItems = 16;
 	parser->byteArrIdx = 1;
 	parser->addrArr = malloc(16 * sizeof VOID_PTR);
-	printf("init %p\n", parser->addrArr);
 	parser->addrArrMaxItems = 16;
 	parser->addrArrIdx = 0;
 	
@@ -2645,7 +2677,6 @@ void JsonParser_Free(struct ParserInterface *parserInterface) {
 	
 	free(parser->byteArr);
 	parser->byteArr = NULL;
-	printf("end %p\n", parser->addrArr);
 	free(parser->addrArr);
 	parser->addrArr = NULL;
 	
@@ -2657,7 +2688,7 @@ void JsonParser_Free(struct ParserInterface *parserInterface) {
 
 /* Interface functions end */
 
-
+/*
 int main(int argc, char *argv[]) {
 	int mainRet;
 	if ((mainRet = CheckAssumptions())) return EXIT_FAILURE;
@@ -2693,5 +2724,5 @@ int main(int argc, char *argv[]) {
 	
 	return mainRet;
 }
-
+*/
 
