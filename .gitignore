@@ -1,5 +1,6 @@
 */*.o
 */*.db
+*/*.so
 sqlite_terminal/sqlite-amalgamation*
 sqlite_terminal/sqlite3.c
 sqlite_terminal/sqlite3.h
