@@ -1,0 +1,21 @@
+{
+  "user": {
+    "id": 123,
+    "profile": {
+      "name": "John Doe",
+      "contact": {
+        "email": "john@example.com",
+        "phones": [
+          { "type": "home", "number": "555-1234" },
+          { "type": "work", "number": "555-5678" }
+        ]
+      }
+    },
+    "preferences": {
+      "notifications": {
+        "email": true,
+        "sms": false
+      }
+    }
+  }
+}

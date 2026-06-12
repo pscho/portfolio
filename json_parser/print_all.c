@@ -24,7 +24,7 @@ int main(int argc, char *argv[]) {
 	JsonParser_Init(&parserInterface, argv[1]);
 	
 	JsonParser_Debug_PrintAll(&parserInterface, &ret);
-	assert(ret == 0);
+	assert(ret == 0 || ret == PARSE_END_OF_FILE);
 	
 	/*
 	bool found = JsonParser_GoTo(&parserInterface, argv[2], &ret);

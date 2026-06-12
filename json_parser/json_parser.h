@@ -105,10 +105,7 @@ enum ParserInterfaceState {
 	PARSER_INTERFACE_NEXT_IS_OBJ,
 	PARSER_INTERFACE_NEXT_IS_ARR,
 	PARSER_INTERFACE_NEXT_IS_BOOL,
-	PARSER_INTERFACE_NEXT_IS_S_CHAR,
-	PARSER_INTERFACE_NEXT_IS_S_INT,
 	PARSER_INTERFACE_NEXT_IS_S_LONG,
-	PARSER_INTERFACE_NEXT_IS_FLOAT,
 	PARSER_INTERFACE_NEXT_IS_LONG_DOUBLE,
 	PARSER_INTERFACE_NEXT_IS_STR,
 	PARSER_INTERFACE_NEXT_IS_NULL,
@@ -128,6 +125,7 @@ struct ParserInterface {
 	bool skip; // Only used in _JsonParser_SkipObjArr
 };
 
+
 /*
 Return value: The bool value if errCode == 0
 
@@ -138,25 +136,6 @@ Error codes:
 */
 bool JsonParser_GetBoolValue(struct ParserInterface *interface, int * const errCode);
 
-/*
-Return value: The char value if errCode == 0
-
-Error codes:
-	- EXIT_FAILURE: The last call to the interface was not a call to JsonParser_GetNextType
-					that returned without an error and had JP_S_CHAR as the return value.
-
-*/
-char JsonParser_GetSCharValue(struct ParserInterface *interface, int * const errCode);
-
-/*
-Return value: The signed integer value if errCode == 0
-
-Error codes:
-	- EXIT_FAILURE: The last call to the interface was not a call to JsonParser_GetNextType
-					that returned without an error and had JP_S_INT as the return value.
-
-*/
-int JsonParser_GetSIntValue(struct ParserInterface *interface, int * const errCode);
 
 /*
 Return value: The long value if errCode == 0
@@ -168,15 +147,6 @@ Error codes:
 */
 long JsonParser_GetSLongValue(struct ParserInterface *interface, int * const errCode);
 
-/*
-Return value: The float value if errCode == 0
-
-Error codes:
-	- EXIT_FAILURE: The last call to the interface was not a call to JsonParser_GetNextType
-					that returned without an error and had JP_FLOAT as the return value.
-
-*/
-float JsonParser_GetFloatValue(struct ParserInterface *interface, int * const errCode);
 
 /*
 Return value: The long double value if errCode == 0
@@ -188,6 +158,7 @@ Error codes:
 */
 long double JsonParser_GetLongDoubleValue(struct ParserInterface *interface, int * const errCode);
 
+
 /*
 Return value: Pointer to null-terminated string if errCode == 0
 
@@ -197,6 +168,7 @@ Error codes:
 
 */
 char* JsonParser_GetStringValue(struct ParserInterface *interface, int * const errCode);
+
 
 /*
 Return value: A pointer to the start of the key value string.
@@ -210,6 +182,7 @@ Error codes:
 */
 const char * JsonParser_GetKeyValue(struct ParserInterface *interface, int * const errCode);
 
+
 /*
 Return values:
 	0: Object/array collapsed successfully.
@@ -217,12 +190,14 @@ Return values:
 */
 int JsonParser_Collapse(struct ParserInterface *interface);
 
+
 /*
 Return values:
 	0: Object/array expanded successfully.
 	EXIT_FAILURE: Error
 */
 int JsonParser_Expand(struct ParserInterface *interface);
+
 
 /*
 Return values:
@@ -234,6 +209,7 @@ Error codes:
 */
 enum ParserDataType JsonParser_GetNextType(struct ParserInterface *interface, int * const errCode);
 
+
 /*
 Return values:
 	JP_OBJ: Object
@@ -243,6 +219,7 @@ Error codes:
 	- EXIT_FAILURE: Error
 */
 enum ParserDataType JsonParser_GetCurrentType(struct ParserInterface *interface, int * const errCode);
+
 
 /*
 Return values:
@@ -258,6 +235,7 @@ Error codes:
 */
 bool JsonParser_HasNext(struct ParserInterface *interface, int * const errCode);
 
+
 /*
 Examples:
 	x.y
@@ -272,11 +250,15 @@ Examples:
 */
 bool JsonParser_GoTo(struct ParserInterface *interface, const char * const path, int *errCode);
 
+
 int JsonParser_Debug_PrintCurrent(struct ParserInterface *parserInterface);
+
 
 void JsonParser_Debug_PrintAll(struct ParserInterface *parserInterface, int *errCode);
 
+
 int JsonParser_Init(struct ParserInterface *parserInterface, char *filePath);
+
 
 void JsonParser_Free(struct ParserInterface *parserInterface);
 

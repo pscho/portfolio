@@ -10,6 +10,7 @@
 // 5/22/26: TODO Clear byte array with each usage
 // TODO: 5/22/26 Better memory chunk size allocation for byteArr
 // TODO: 5/22/26 Fractional values for very large (long double) values printing 0 
+// TODO: 6/12/26 Input validation for JsonParser_GoTo
 
 #include "json_parser.h"
 
@@ -84,6 +85,23 @@ bool CharInString(const char *s, unsigned char c) {
 	}
 	
 	return false;
+}
+
+
+int ValidateAndAdvanceStrIdx(const char * const validationStr, const char * const s, size_t * const idx) {
+	int ret = 0;
+
+	for (size_t i = 0; i < strlen(validationStr); ++i) {
+		if (s[*idx] != validationStr[i]) {
+			UtilsError("ValidateAndAdvanceStrIdx - char mismatch; %s %s %lu %lu\n", validationStr, s, *idx, i);
+			ret = EXIT_FAILURE;
+			break;
+		} else {
+			*idx += 1;
+		}
+	}
+
+	return ret; 
 }
 
 
@@ -431,7 +449,7 @@ int _IterateParser(struct Parser *parser) {
 	}
 	
 #ifdef DEBUG
-	printf("char: %c colNum: %ld\n", nextChar, parser->colNum);
+	printf("char: %c lineNum: %ld colNum: %ld\n", nextChar, parser->lineNum, parser->colNum);
 #endif
 
 	if (nextChar == 10) { // Line feed
@@ -861,6 +879,8 @@ int _IterateParser(struct Parser *parser) {
 					case PARSE_VALUE_FINISH:
 					case PARSE_OBJECT_CLOSE_CURLY_BRACE:
 					case PARSE_OBJECT_CLOSE_CURLY_BRACE_AGAIN:
+					case PARSE_ARRAY_CLOSE_BRACKET:
+					case PARSE_ARRAY_CLOSE_BRACKET_AGAIN:
 						break;
 					case PARSE_KEY_ID:
 					case PARSE_STRING:
@@ -1116,10 +1136,7 @@ void _CheckParserInterfaceState(struct ParserInterface *interface) {
 				assert(parser->iterateOnly);
 				break;
 			case PARSER_INTERFACE_NEXT_IS_BOOL:
-			case PARSER_INTERFACE_NEXT_IS_S_CHAR:
-			case PARSER_INTERFACE_NEXT_IS_S_INT:
 			case PARSER_INTERFACE_NEXT_IS_S_LONG:
-			case PARSER_INTERFACE_NEXT_IS_FLOAT:
 			case PARSER_INTERFACE_NEXT_IS_LONG_DOUBLE:
 			case PARSER_INTERFACE_NEXT_IS_STR:
 			case PARSER_INTERFACE_NEXT_IS_NULL:
@@ -1209,10 +1226,7 @@ int _IterateParserInterface(struct ParserInterface *interface, const enum Parser
 			interface->_state == PARSER_INTERFACE_ARR_EXPANDED ||
 			interface->_state == PARSER_INTERFACE_COLLAPSED ||
 			interface->_state == PARSER_INTERFACE_NEXT_IS_BOOL ||
-			interface->_state == PARSER_INTERFACE_NEXT_IS_S_CHAR ||
-			interface->_state == PARSER_INTERFACE_NEXT_IS_S_INT || 
 			interface->_state == PARSER_INTERFACE_NEXT_IS_S_LONG || 
-			interface->_state == PARSER_INTERFACE_NEXT_IS_FLOAT || 
 			interface->_state == PARSER_INTERFACE_NEXT_IS_LONG_DOUBLE ||
 			interface->_state == PARSER_INTERFACE_NEXT_IS_STR ||
 			interface->_state == PARSER_INTERFACE_NEXT_IS_NULL);
@@ -1266,10 +1280,7 @@ int _IterateParserInterface(struct ParserInterface *interface, const enum Parser
 			}
 			break;
 		case PARSER_INTERFACE_NEXT_IS_BOOL:
-		case PARSER_INTERFACE_NEXT_IS_S_CHAR:
-		case PARSER_INTERFACE_NEXT_IS_S_INT:
 		case PARSER_INTERFACE_NEXT_IS_S_LONG:
-		case PARSER_INTERFACE_NEXT_IS_FLOAT:
 		case PARSER_INTERFACE_NEXT_IS_LONG_DOUBLE:
 		case PARSER_INTERFACE_NEXT_IS_STR:
 		case PARSER_INTERFACE_NEXT_IS_NULL:
@@ -1334,10 +1345,7 @@ int _IterateParserInterface(struct ParserInterface *interface, const enum Parser
 				}
 				break;
 			case PARSER_INTERFACE_NEXT_IS_BOOL:
-			case PARSER_INTERFACE_NEXT_IS_S_CHAR:
-			case PARSER_INTERFACE_NEXT_IS_S_INT:
 			case PARSER_INTERFACE_NEXT_IS_S_LONG:
-			case PARSER_INTERFACE_NEXT_IS_FLOAT:
 			case PARSER_INTERFACE_NEXT_IS_LONG_DOUBLE:
 			case PARSER_INTERFACE_NEXT_IS_STR:
 			case PARSER_INTERFACE_NEXT_IS_NULL:
@@ -1413,9 +1421,10 @@ int _IterateParserInterface(struct ParserInterface *interface, const enum Parser
 								assert(!parser->iterateOnly);
 						} else {
 							assert(parser->iterateOnly == true);
-							if (!interface->skip)
+							if (!interface->skip) {
 								ResetByteArray(parser);
 								parser->iterateOnly = false;
+							}
 						}
 						
 						// Combinational logic on:
@@ -1466,42 +1475,39 @@ int _IterateParserInterface(struct ParserInterface *interface, const enum Parser
 								
 								if (ret == 0) {
 									if (!interface->skip) {
-										enum ParserDataType valueType = *(parser->byteArr + (parser->byteArrIdx - 2));
+										enum ParserDataType valueType = \
+											*(parser->byteArr + (parser->byteArrIdx - 2));
 										switch (valueType) {
 											case JP_BOOL:
-												interface->_state = PARSER_INTERFACE_NEXT_IS_BOOL;
-												break;
-											case JP_S_CHAR:
-												interface->_state = PARSER_INTERFACE_NEXT_IS_S_CHAR;
-												break;
-											case JP_S_INT:
-												interface->_state = PARSER_INTERFACE_NEXT_IS_S_INT;
+												interface->_state = \
+													PARSER_INTERFACE_NEXT_IS_BOOL;
 												break;
 											case JP_S_LONG:
-												interface->_state = PARSER_INTERFACE_NEXT_IS_S_LONG;
-												break;
-											case JP_FLOAT:
-												interface->_state = PARSER_INTERFACE_NEXT_IS_FLOAT;
+												interface->_state = \
+													PARSER_INTERFACE_NEXT_IS_S_LONG;
 												break;
 											case JP_LONG_DOUBLE:
-												interface->_state = PARSER_INTERFACE_NEXT_IS_LONG_DOUBLE;
+												interface->_state = \
+													PARSER_INTERFACE_NEXT_IS_LONG_DOUBLE;
 												break;
 											case JP_STR:
-												interface->_state = PARSER_INTERFACE_NEXT_IS_STR;
+												interface->_state = \
+													PARSER_INTERFACE_NEXT_IS_STR;
 												break;
 											case JP_NULL:
-												interface->_state = PARSER_INTERFACE_NEXT_IS_NULL;
+												interface->_state = \
+													PARSER_INTERFACE_NEXT_IS_NULL;
 												break;
 											default:
 												UtilsError( \
-													"json_parser _IterateParserInterface HAS_NEXT_TRUE_TO_NEXT_IS_X switch");
+								"json_parser _IterateParserInterface HAS_NEXT_TRUE_TO_NEXT_IS_X switch");
 												ret = EXIT_FAILURE;
 												break;
 										}
 									} else {
-										// Hack: Specifically for __JsonParser_Skip, since no data is saved
-										// in byteArr we set interface->_state to a random PARSER_INTERFACE_NEXT_IS_X
-										// state.
+										// Hack: Specifically for __JsonParser_Skip, 
+										// since no data is saved, in byteArr we set 
+										// interface->_state to a random PARSER_INTERFACE_NEXT_IS_X state.
 										interface->_state = PARSER_INTERFACE_NEXT_IS_BOOL;
 									}
 								}
@@ -1547,9 +1553,10 @@ int _IterateParserInterface(struct ParserInterface *interface, const enum Parser
 					assert(*ps == PARSE_KEY_ID || *ps == PARSE_OBJECT_CLOSE_CURLY_BRACE);
 					switch (*ps) {
 						case PARSE_KEY_ID:
-							if (!interface->skip)
+							if (!interface->skip) {
 								ResetByteArray(parser);
 								parser->iterateOnly = false;
+							}
 							interface->_state = PARSER_INTERFACE_HAS_NEXT_TRUE;
 							break;
 						case PARSE_OBJECT_CLOSE_CURLY_BRACE:
@@ -1563,9 +1570,10 @@ int _IterateParserInterface(struct ParserInterface *interface, const enum Parser
 				}
 				break;
 			case ARR_EXPANDED_TO_HAS_NEXT_X:
-				if (!interface->skip)
+				if (!interface->skip) {
 					ResetByteArray(parser);
 					parser->iterateOnly = false;
+				}
 				tempState = *ps;
 				while (*ps == tempState) {
 					if ((ret = _IterateParser(parser))) {
@@ -1626,9 +1634,10 @@ int _IterateParserInterface(struct ParserInterface *interface, const enum Parser
 					if (*ps == BEGIN_VALUE_PARSE || *ps == PARSE_OBJECT_COMMA) {
 						if (*ps == BEGIN_VALUE_PARSE) {
 							assert(parser->isParsingArray);
-							if (!interface->skip)
+							if (!interface->skip) {
 								ResetByteArray(parser);
 								parser->iterateOnly = false;
+							}
 						}
 						interface->_state = PARSER_INTERFACE_HAS_NEXT_TRUE;
 					} else {
@@ -1646,9 +1655,10 @@ int _IterateParserInterface(struct ParserInterface *interface, const enum Parser
 				} else {
 					if (*ps == BEGIN_VALUE_PARSE) {
 						assert(parser->isParsingArray);
-						if (!interface->skip)
+						if (!interface->skip) {
 							ResetByteArray(parser);
 							parser->iterateOnly = false;
+						}
 					}
 					interface->_state = PARSER_INTERFACE_HAS_NEXT_TRUE;
 				}
@@ -1673,10 +1683,7 @@ int _IterateParserInterface(struct ParserInterface *interface, const enum Parser
 					interface->_state == PARSER_INTERFACE_NEXT_IS_OBJ ||
 					interface->_state == PARSER_INTERFACE_NEXT_IS_ARR ||
 					interface->_state == PARSER_INTERFACE_NEXT_IS_BOOL ||
-					interface->_state == PARSER_INTERFACE_NEXT_IS_S_CHAR ||
-					interface->_state == PARSER_INTERFACE_NEXT_IS_S_INT || 
 					interface->_state == PARSER_INTERFACE_NEXT_IS_S_LONG || 
-					interface->_state == PARSER_INTERFACE_NEXT_IS_FLOAT || 
 					interface->_state == PARSER_INTERFACE_NEXT_IS_LONG_DOUBLE ||
 					interface->_state == PARSER_INTERFACE_NEXT_IS_STR ||
 					interface->_state == PARSER_INTERFACE_NEXT_IS_NULL || 
@@ -1724,57 +1731,6 @@ bool JsonParser_GetBoolValue(struct ParserInterface *interface, int * const errC
 }
 
 
-
-/*
-Return value: The char value if errCode == 0
-
-Error codes:
-	- EXIT_FAILURE: The last call to the interface was not a call to JsonParser_GetNextType
-					that returned without an error and had JP_S_CHAR as the return value.
-
-*/
-char JsonParser_GetSCharValue(struct ParserInterface *interface, int * const errCode) {
-	// Preconditions
-	assert(interface != NULL);
-	_CheckParserInterfaceState(interface);
-	
-	if (interface->_state != PARSER_INTERFACE_NEXT_IS_S_CHAR) {
-		*errCode = EXIT_FAILURE;
-		return EXIT_FAILURE;
-	}
-	
-	unsigned char *byteArrPtr = interface->_parser.byteArr + interface->_parser.byteArrIdx;
-	assert(*(byteArrPtr - 2) == JP_S_CHAR);
-	
-	return *((char*) (byteArrPtr - 2 - 1));
-}
-
-
-/*
-Return value: The signed integer value if errCode == 0
-
-Error codes:
-	- EXIT_FAILURE: The last call to the interface was not a call to JsonParser_GetNextType
-					that returned without an error and had JP_S_INT as the return value.
-
-*/
-int JsonParser_GetSIntValue(struct ParserInterface *interface, int * const errCode) {
-	// Preconditions
-	assert(interface != NULL);
-	_CheckParserInterfaceState(interface);
-	
-	if (interface->_state != PARSER_INTERFACE_NEXT_IS_S_INT) {
-		*errCode = EXIT_FAILURE;
-		return EXIT_FAILURE;
-	}
-	
-	unsigned char *byteArrPtr = interface->_parser.byteArr + interface->_parser.byteArrIdx;
-	assert(*(byteArrPtr - 2) == JP_S_INT);
-	
-	return *((int*) (byteArrPtr - 2 - 4));
-}
-
-
 /*
 Return value: The long value if errCode == 0
 
@@ -1797,31 +1753,6 @@ long JsonParser_GetSLongValue(struct ParserInterface *interface, int * const err
 	assert(*(byteArrPtr - 2) == JP_S_LONG);
 	
 	return *((long*) (byteArrPtr - 2 - 8));
-}
-
-
-/*
-Return value: The float value if errCode == 0
-
-Error codes:
-	- EXIT_FAILURE: The last call to the interface was not a call to JsonParser_GetNextType
-					that returned without an error and had JP_FLOAT as the return value.
-
-*/
-float JsonParser_GetFloatValue(struct ParserInterface *interface, int * const errCode) {
-	// Preconditions
-	assert(interface != NULL);
-	_CheckParserInterfaceState(interface);
-	
-	if (interface->_state != PARSER_INTERFACE_NEXT_IS_FLOAT) {
-		*errCode = EXIT_FAILURE;
-		return EXIT_FAILURE;
-	}
-	
-	unsigned char *byteArrPtr = interface->_parser.byteArr + interface->_parser.byteArrIdx;
-	assert(*(byteArrPtr - 2) == JP_FLOAT);
-	
-	return *((float*) (byteArrPtr - 2 - 4));
 }
 
 
@@ -1904,10 +1835,7 @@ const char * JsonParser_GetKeyValue(struct ParserInterface *interface, int * con
 	_CheckParserInterfaceState(interface);
 	
 	if (!(interface->_state == PARSER_INTERFACE_NEXT_IS_BOOL ||
-			interface->_state == PARSER_INTERFACE_NEXT_IS_S_CHAR ||
-			interface->_state == PARSER_INTERFACE_NEXT_IS_S_INT || 
 			interface->_state == PARSER_INTERFACE_NEXT_IS_S_LONG || 
-			interface->_state == PARSER_INTERFACE_NEXT_IS_FLOAT || 
 			interface->_state == PARSER_INTERFACE_NEXT_IS_LONG_DOUBLE ||
 			interface->_state == PARSER_INTERFACE_NEXT_IS_STR ||
 			interface->_state == PARSER_INTERFACE_NEXT_IS_NULL ||   
@@ -1927,12 +1855,7 @@ const char * JsonParser_GetKeyValue(struct ParserInterface *interface, int * con
 		byteArrPtr -= 2;
 		switch (interface->_state) {
 			case PARSER_INTERFACE_NEXT_IS_BOOL:
-			case PARSER_INTERFACE_NEXT_IS_S_CHAR:
 				byteArrPtr -= 1;
-				break;
-			case PARSER_INTERFACE_NEXT_IS_S_INT:
-			case PARSER_INTERFACE_NEXT_IS_FLOAT:
-				byteArrPtr -= 4;
 				break;
 			case PARSER_INTERFACE_NEXT_IS_S_LONG:
 				byteArrPtr -= 8;
@@ -2039,17 +1962,8 @@ enum ParserDataType JsonParser_GetNextType(struct ParserInterface *interface, in
 				case PARSER_INTERFACE_NEXT_IS_BOOL:
 					dataType = JP_BOOL;
 					break;
-				case PARSER_INTERFACE_NEXT_IS_S_CHAR:
-					dataType = JP_S_CHAR;
-					break;
-				case PARSER_INTERFACE_NEXT_IS_S_INT:
-					dataType = JP_S_INT;
-					break;
 				case PARSER_INTERFACE_NEXT_IS_S_LONG:
 					dataType = JP_S_LONG;
-					break;
-				case PARSER_INTERFACE_NEXT_IS_FLOAT:
-					dataType = JP_FLOAT;
 					break;
 				case PARSER_INTERFACE_NEXT_IS_LONG_DOUBLE:
 					dataType = JP_LONG_DOUBLE;
@@ -2103,17 +2017,8 @@ enum ParserDataType JsonParser_GetCurrentType(struct ParserInterface *interface,
 		case PARSER_INTERFACE_NEXT_IS_BOOL:
 			dataType = JP_BOOL;
 			break;
-		case PARSER_INTERFACE_NEXT_IS_S_CHAR:
-			dataType = JP_S_CHAR;
-			break;
-		case PARSER_INTERFACE_NEXT_IS_S_INT:
-			dataType = JP_S_INT;
-			break;
 		case PARSER_INTERFACE_NEXT_IS_S_LONG:
 			dataType = JP_S_LONG;
-			break;
-		case PARSER_INTERFACE_NEXT_IS_FLOAT:
-			dataType = JP_FLOAT;
 			break;
 		case PARSER_INTERFACE_NEXT_IS_LONG_DOUBLE:
 			dataType = JP_LONG_DOUBLE;
@@ -2181,7 +2086,11 @@ int _JsonParser_SkipObjArr(struct ParserInterface *interface, enum ParserDataTyp
 	// If the member is an object/array, "skip" the member by expanding, iterating through
 	// all child members recursively, and then collapsing the member
 	assert(initialDataType == JP_OBJ || initialDataType == JP_ARR);
-	
+
+#ifdef DEBUG
+	printf("JsonParser_SkipObjArr; initialDataType: %d\n", initialDataType);
+#endif
+
 	int errCode = 0;
 
 	// Turning on skip prevents saving unneeded parsed data into byteArr by permanently
@@ -2328,19 +2237,33 @@ bool JsonParser_GoTo(struct ParserInterface *interface, const char * const path,
 					// If this is the last member, set locationFound, else move path idx forward
 					pathIdx += strlen(key);
 					char c = path[pathIdx];
-					assert(c == '\"' || c == '.' || c == ']' || c == '[' || c == '\0');
-					while (c == '\"' || c == '.' || c == ']' || c == '[') {
-						++pathIdx;
+					++pathIdx;
+
+					if (c == '\"') {
+						*errCode = ValidateAndAdvanceStrIdx("]", path, &pathIdx); 
+						if (*errCode != 0) goto cleanup_JsonParser_GoTo;
 						c = path[pathIdx];
+						++pathIdx;
 					}
-					
-					if (c == '\0') {
-						locationFound = true;
-					} else {
-						// Move path idx forward to idx of first char of object name or array index value
-						if (c == '[') ++pathIdx;
+
+					switch (c) {
+						case '.':
+							break;
+						case '[':
+							c = path[pathIdx];
+							if (c == '\"') {
+								++pathIdx;
+							}
+							break;
+						case '\0':
+							locationFound = true;
+							break;
+						default:
+							UtilsError("JsonParser_GoTo switch PARSER_OBJ 1 %c %lu", c, pathIdx);
+							*errCode = EXIT_FAILURE;
+							goto cleanup_JsonParser_GoTo;
 					}
-					
+										
 				} else {
 					if (dataType == JP_OBJ || dataType == JP_ARR) {
 						*errCode = _JsonParser_SkipObjArr(interface, dataType);
@@ -2358,15 +2281,25 @@ bool JsonParser_GoTo(struct ParserInterface *interface, const char * const path,
 					while (path[pathIdx] != ']')
 						++pathIdx;
 					++pathIdx;
-					if (path[pathIdx] == '\0') {
-						locationFound = true;
-					} else {
-						char c = path[pathIdx];
-						// Move path idx forward to idx of first char of object name or array index value
-						while (c == '\"' || c == '.' || c == '[') {
+					char c = path[pathIdx];
+					switch (c) {
+						case '\0':
+							locationFound = true;
+							break;
+						case '.':
+							++pathIdx;
+							break;
+						case '[':
 							++pathIdx;
 							c = path[pathIdx];
-						}
+							if (c == '\"') {
+								++pathIdx;
+							}
+							break;
+						default:
+							UtilsError("JsonParser_GoTo switch PARSER_ARR 2 %c %lu", c, pathIdx);
+							*errCode = EXIT_FAILURE;
+							goto cleanup_JsonParser_GoTo;
 					}
 					
 				} else {
@@ -2381,7 +2314,6 @@ bool JsonParser_GoTo(struct ParserInterface *interface, const char * const path,
 			}
 		
 			if (memberFound && !locationFound) {
-				// Expand if the member is an object or array
 				if (dataType == JP_OBJ || dataType == JP_ARR) {
 					if (dataType == JP_OBJ) {
 						mode = PARSER_OBJ;
@@ -2398,6 +2330,7 @@ bool JsonParser_GoTo(struct ParserInterface *interface, const char * const path,
 							goto cleanup_JsonParser_GoTo;
 						}
 						assert(*endptr == ']');
+						arrCurrTargetIdx = 0;
 					}
 					
 					*errCode = JsonParser_Expand(interface);
@@ -2406,7 +2339,8 @@ bool JsonParser_GoTo(struct ParserInterface *interface, const char * const path,
 					}
 					
 				} else {
-					locationFound = true;
+					// Error: Attempting to expand a member that is not an object/array
+					stopSearch = true;
 				}
 			}
 		}
@@ -2426,17 +2360,14 @@ int JsonParser_Debug_PrintCurrent(struct ParserInterface *parserInterface) {
 
 	if (dataType == JP_OBJ || dataType == JP_ARR) {
 		if (dataType == JP_OBJ) {
-			printf("OBJ\n");
+			printf("Object\n");
 		} else {
-			printf("ARR\n");
+			printf("Array\n");
 		}
 		
 	} else {
 		bool boolValue = false;
-		char charValue = 0;
-		int intValue = 0;
 		long longValue = 0;
-		float floatValue = 0;
 		long double longDoubleValue = 0;
 		char * strValue = NULL;
 		switch (dataType) {
@@ -2445,25 +2376,10 @@ int JsonParser_Debug_PrintCurrent(struct ParserInterface *parserInterface) {
 				assert(errCode == 0);
 				printf("bool %d\n", boolValue);
 				break;
-			case JP_S_CHAR:
-				charValue = JsonParser_GetSCharValue(parserInterface, &errCode);
-				assert(errCode == 0);
-				printf("char %c\n", charValue + 48);
-				break;
-			case JP_S_INT:
-				intValue = JsonParser_GetSIntValue(parserInterface, &errCode);
-				assert(errCode == 0);
-				printf("int %d\n", intValue);
-				break;
 			case JP_S_LONG:
 				longValue = JsonParser_GetSLongValue(parserInterface, &errCode);
 				assert(errCode == 0);
 				printf("long %ld\n", longValue);
-				break;
-			case JP_FLOAT:
-				floatValue = JsonParser_GetFloatValue(parserInterface, &errCode);
-				assert(errCode == 0);
-				printf("float %f\n", floatValue);
 				break;
 			case JP_LONG_DOUBLE:
 				longDoubleValue = JsonParser_GetLongDoubleValue(parserInterface, &errCode);
@@ -2488,12 +2404,14 @@ int JsonParser_Debug_PrintCurrent(struct ParserInterface *parserInterface) {
 }
 
 
-
 void JsonParser_Debug_PrintAll(struct ParserInterface *parserInterface, int *errCode) {
 	*errCode = 0;
 
 	bool hasNext = JsonParser_HasNext(parserInterface, errCode);
-	assert(*errCode == 0);
+	if (*errCode != 0) {
+		assert(*errCode == PARSE_END_OF_FILE);
+		return;
+	}	
 	assert(hasNext);
 	
 	enum ParserDataType dataType = JsonParser_GetNextType(parserInterface, errCode);
@@ -2510,11 +2428,11 @@ void JsonParser_Debug_PrintAll(struct ParserInterface *parserInterface, int *err
 	if (dataType == JP_OBJ) {
 		mode = PARSER_OBJ;
 		assert(ArrayStack_Push(&modeStack, &PARSER_OBJ) == 0);
-		printf("\t{");
+		printf("{\n");
 	} else {
 		mode = PARSER_ARR;
 		assert(ArrayStack_Push(&modeStack, &PARSER_ARR) == 0);
-		printf("\t[");
+		printf("[\n");
 	}
 	
 	while (!ArrayStack_IsEmpty(&modeStack)) {
@@ -2522,10 +2440,13 @@ void JsonParser_Debug_PrintAll(struct ParserInterface *parserInterface, int *err
 		hasNext = JsonParser_HasNext(parserInterface, errCode);
 		assert(*errCode == 0);
 		if (!hasNext) {
+			for (size_t i = 0; i < ArrayStack_Count(&modeStack) - 1; ++i)
+				printf("\t");
+
 			if (mode == PARSER_OBJ) {
-				printf("}");
+				printf("}\n");
 			} else {
-				printf("]");
+				printf("]\n");
 			}
 			*errCode = ArrayStack_Pop(&modeStack, &mode);
 			
@@ -2535,18 +2456,18 @@ void JsonParser_Debug_PrintAll(struct ParserInterface *parserInterface, int *err
 			
 			*errCode = JsonParser_Collapse(parserInterface);
 			assert(*errCode == 0);
-			printf("\n");
-			for (size_t i = 0; i < ArrayStack_Count(&modeStack); ++i)
-					printf("\t");
 			
 		} else {
 			dataType = JsonParser_GetNextType(parserInterface, errCode);
 			assert(*errCode == 0);
 		
+			for (size_t i = 0; i < ArrayStack_Count(&modeStack); ++i)
+				printf("\t");
+
 			if (mode == PARSER_OBJ) {
 				const char * key = JsonParser_GetKeyValue(parserInterface, errCode);
 				assert(*errCode == 0);
-				printf("%s: ", key);
+				printf("\"%s\": ", key);
 			}
 		
 			if (dataType == JP_OBJ || dataType == JP_ARR) {
@@ -2556,15 +2477,11 @@ void JsonParser_Debug_PrintAll(struct ParserInterface *parserInterface, int *err
 				} else {
 					mode = PARSER_ARR;
 					assert(ArrayStack_Push(&modeStack, &PARSER_ARR) == 0);
-					
 				}
-				printf("\n");
-				for (size_t i = 0; i < ArrayStack_Count(&modeStack); ++i)
-					printf("\t");
 				if (dataType == JP_OBJ) {
-					printf("{");
+					printf("{\n");
 				} else {
-					printf("[");
+					printf("[\n");
 				}
 				
 				*errCode = JsonParser_Expand(parserInterface);
@@ -2572,50 +2489,40 @@ void JsonParser_Debug_PrintAll(struct ParserInterface *parserInterface, int *err
 				
 			} else {
 				bool boolValue = false;
-				char charValue = 0;
-				int intValue = 0;
 				long longValue = 0;
-				float floatValue = 0;
 				long double longDoubleValue = 0;
 				char * strValue = NULL;
 				switch (dataType) {
 					case JP_BOOL:
 						boolValue = JsonParser_GetBoolValue(parserInterface, errCode);
 						assert(*errCode == 0);
-						printf("bool %d, ", boolValue);
-						break;
-					case JP_S_CHAR:
-						charValue = JsonParser_GetSCharValue(parserInterface, errCode);
-						assert(*errCode == 0);
-						printf("char %c, ", charValue + 48);
-						break;
-					case JP_S_INT:
-						intValue = JsonParser_GetSIntValue(parserInterface, errCode);
-						assert(*errCode == 0);
-						printf("int %d, ", intValue);
+
+						char *boolStr = NULL;
+						if (boolValue) {
+							boolStr = "true";
+						} else {
+							boolStr = "false";
+						}
+
+						printf("bool %s\n", boolStr);
 						break;
 					case JP_S_LONG:
 						longValue = JsonParser_GetSLongValue(parserInterface, errCode);
 						assert(*errCode == 0);
-						printf("long %ld, ", longValue);
-						break;
-					case JP_FLOAT:
-						floatValue = JsonParser_GetFloatValue(parserInterface, errCode);
-						assert(*errCode == 0);
-						printf("float %f, ", floatValue);
+						printf("long %ld\n", longValue);
 						break;
 					case JP_LONG_DOUBLE:
 						longDoubleValue = JsonParser_GetLongDoubleValue(parserInterface, errCode);
 						assert(*errCode == 0);
-						printf("long double %Lf, ", longDoubleValue);
+						printf("long double %Lf\n", longDoubleValue);
 						break;
 					case JP_STR:
 						strValue = JsonParser_GetStringValue(parserInterface, errCode);
 						assert(*errCode == 0);
-						printf("str %s, ", strValue);
+						printf("str \"%s\"\n", strValue);
 						break;
 					case JP_NULL:
-						printf("NULL, ");
+						printf("NULL\n");
 						break;
 					default:
 						assert(1 == 0);

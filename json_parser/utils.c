@@ -68,8 +68,13 @@ int CheckAssumptions() {
 }
 
 
-void UtilsError(const char *msg) {
-	fprintf(stderr, "%s\nerrnn:\n", msg);
+void UtilsError(const char *msgFmt, ...) {
+	va_list vargs;
+	va_start (vargs, msgFmt);
+	vfprintf(stderr, msgFmt, vargs);
+	va_end (vargs);
+
+	fprintf(stderr, "\nerrno: ");
 	perror(NULL);
 	fprintf(stderr, "Stacktrace:\n");
 	
@@ -89,10 +94,10 @@ void UtilsError(const char *msg) {
 		fprintf(stderr, "%s\n", symbols[i]);
 	}
 	
-	if (LOG_LEVEL >= 7) {
-		assert(2 + 2 == 5); // Trigger error
-	}
-	
+#ifdef DEBUG
+	assert(2 + 2 == 5); // Trigger error
+#endif
+
 	free(symbols);
 	return;	
 }

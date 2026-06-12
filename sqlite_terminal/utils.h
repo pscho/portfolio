@@ -23,6 +23,7 @@
 #include <execinfo.h>
 #include <string.h>
 #include <errno.h>
+#include <stdarg.h>
 
 // Can be disabled using -DNDEBUG
 #include <assert.h>
@@ -70,7 +71,7 @@ struct JsonObject {
 
 int CheckAssumptions();
 
-void UtilsError(const char *msg);
+void UtilsError(const char *msgFmt, ...);
 
 bool CheckNotNull(const void *ptr, const char *contextMsg);
 
