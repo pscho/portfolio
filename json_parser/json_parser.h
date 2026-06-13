@@ -16,7 +16,7 @@ enum ParserDataType { // Max count: UCHAR_MAX
 	JP_NULL
 };
 
-
+/* Internal use only */
 enum ParserState {
 	PARSE_NULL_STATE,
 	PARSE_INIT,
@@ -66,7 +66,7 @@ enum ParserState {
 	PARSE_ERROR_UNEXPECTED_CHAR
 };
 
-
+/* Internal use only */
 struct Parser {
 	enum ParserState state;
 	
@@ -97,7 +97,7 @@ struct Parser {
 	bool iterateOnly;
 };
 
-
+/* Internal use only */
 enum ParserInterfaceState {
 	PARSER_INTERFACE_INITIALIZED,
 	PARSER_INTERFACE_HAS_NEXT_TRUE,
@@ -116,7 +116,11 @@ enum ParserInterfaceState {
 	PARSER_INTERFACE_ERROR
 };
 
-
+/*
+   Main struct used for interacting with the parser.
+   To use the JSON parser, create a variable of this struct type and
+   call JsonParser_Init.
+*/
 struct ParserInterface {
 	enum ParserInterfaceState _state;
 	struct Parser _parser;
@@ -127,9 +131,24 @@ struct ParserInterface {
 
 
 /*
-Return value: The bool value if errCode == 0
+   Always needs to be called prior to using the parser. Takes in the [filePath] as an argument and
+   attempts to open it.
 
-Error codes:
+*/
+int JsonParser_Init(struct ParserInterface *parserInterface, char *filePath); 
+
+
+/*
+   Always needs to be called after finishing using the parser to free allocated memory.
+
+*/
+void JsonParser_Free(struct ParserInterface *parserInterface);
+
+
+/*
+   Return value: The bool value if errCode == 0
+
+   Error codes:
 	- EXIT_FAILURE: The last call to the interface was not a call to JsonParser_GetNextType
 					that returned without an error and had JP_BOOL as the return value.
 
@@ -138,9 +157,9 @@ bool JsonParser_GetBoolValue(struct ParserInterface *interface, int * const errC
 
 
 /*
-Return value: The long value if errCode == 0
+   Return value: The long value if errCode == 0
 
-Error codes:
+   Error codes:
 	- EXIT_FAILURE: The last call to the interface was not a call to JsonParser_GetNextType
 					that returned without an error and had JP_S_LONG as the return value.
 
@@ -149,32 +168,33 @@ long JsonParser_GetSLongValue(struct ParserInterface *interface, int * const err
 
 
 /*
-Return value: The long double value if errCode == 0
+   Return value: The long double value if errCode == 0
 
-Error codes:
+   Error codes:
 	- EXIT_FAILURE: The last call to the interface was not a call to JsonParser_GetNextType
 					that returned without an error and had JP_LONG_DOUBLE as the return value.
 
 */
-long double JsonParser_GetLongDoubleValue(struct ParserInterface *interface, int * const errCode);
+long double JsonParser_GetLongDoubleValue(struct ParserInterface *interface, int * const errCode); 
 
 
 /*
-Return value: Pointer to null-terminated string if errCode == 0
+   Return value: Pointer to null-terminated string if errCode == 0
+	If the string is empty, points to a null terminator.
 
-Error codes:
+   Error codes:
 	- EXIT_FAILURE: The last call to the interface was not a call to JsonParser_GetNextType
 					that returned without an error and had JP_STR as the return value.
 
 */
-char* JsonParser_GetStringValue(struct ParserInterface *interface, int * const errCode);
+char* JsonParser_GetStringValue(struct ParserInterface *interface, int * const errCode); 
 
 
 /*
-Return value: A pointer to the start of the key value string.
-	If the string is empty, points to a null character.
+   Return value: A pointer to the start of the key value string.
+	If the string is empty, points to a null terminator.
 
-Error codes:
+   Error codes:
 	- EXIT_FAILURE: The current position of the parser may be in an array, or
 		it is in an object but the last call to the interface was not a call to JsonParser_GetNextType
 		that returned without an error.
@@ -184,60 +204,70 @@ const char * JsonParser_GetKeyValue(struct ParserInterface *interface, int * con
 
 
 /*
-Return values:
+   When JsonParser_HasNext returns false, this function should be called to move the parser
+   forward. After calling JsonParser_Collapse, JsonParser_HasNext should be called.
+
+   Return values:
 	0: Object/array collapsed successfully.
-	EXIT_FAILURE: Error
+	All other values: Error
 */
-int JsonParser_Collapse(struct ParserInterface *interface);
+int JsonParser_Collapse(struct ParserInterface *interface); 
 
 
 /*
-Return values:
+   When JsonParser_GetNextType returns either a JP_OBJ or a JP_ARR, this function should be called to
+   move the parser forward. After calling JsonParser_Expand, JsonParser_HasNext should be called.
+
+   Return values:
 	0: Object/array expanded successfully.
-	EXIT_FAILURE: Error
+	All other values: Error
 */
-int JsonParser_Expand(struct ParserInterface *interface);
+int JsonParser_Expand(struct ParserInterface *interface); 
 
 
 /*
-Return values:
-	JP_OBJ: Object
+   Return values:
+   	JP_OBJ: Object
 	JP_ARR: Array
-	
-Error codes:
-	- EXIT_FAILURE: Error
+	JP_BOOL: Boolean
+	JP_S_LONG: Signed long
+	JP_LONG_DOUBLE: Signed floating number
+	JP_STR: String
+	JP_NULL: NULL value
 */
-enum ParserDataType JsonParser_GetNextType(struct ParserInterface *interface, int * const errCode);
+enum ParserDataType JsonParser_GetNextType(struct ParserInterface *interface, int * const errCode); 
 
 
 /*
-Return values:
-	JP_OBJ: Object
+   Return values:
+   	JP_OBJ: Object
 	JP_ARR: Array
-	
-Error codes:
-	- EXIT_FAILURE: Error
+	JP_BOOL: Boolean
+	JP_S_LONG: Signed long
+	JP_LONG_DOUBLE: Signed floating number
+	JP_STR: String
+	JP_NULL: NULL value
 */
-enum ParserDataType JsonParser_GetCurrentType(struct ParserInterface *interface, int * const errCode);
+enum ParserDataType JsonParser_GetCurrentType(struct ParserInterface *interface, int * const errCode); 
 
 
 /*
-Return values:
+   Return values:
 	true: The parser sees that a potential object is available to be parsed, although at this point
 			cannot guarantee that there will be no parsing errors during the actual parsing of the
 			object made with the next available command, JsonParser_GetNextType.
 	false: There are no additional objects available within this object/array.
-
-Error codes:
-	- EXIT_FAILURE: Error
-	- PARSE_END_OF_FILE
-	- PARSE_ERROR_UNEXPECTED_CHAR
 */
-bool JsonParser_HasNext(struct ParserInterface *interface, int * const errCode);
+bool JsonParser_HasNext(struct ParserInterface *interface, int * const errCode); 
 
 
 /*
-Examples:
+   Moves the parser to the location specified by [path], if it exists.
+   Once navigation is successful, the type of the object at path can be
+   retrieved via JsonParser_GetCurrentType, and the value can be retrieved by
+   the relevant JsonParser_Get[TYPE]Value function. 
+
+   Example paths:
 	x.y
 	x[0]
 	[2]
@@ -247,20 +277,27 @@ Examples:
 	["objWithPeriodsInKey...."].x
 	
 	Single quotes currently unsupported (ex. ['obj'])
+
+   Note: If sending the value of the path from a shell (such as when using the "goto" executable in the repo)
+   	 quotes in the path need to be escaped. Ex: ./goto "sample.json" [\"students\"][23][\"first_name\"]
+   
 */
-bool JsonParser_GoTo(struct ParserInterface *interface, const char * const path, int *errCode);
+bool JsonParser_GoTo(struct ParserInterface *interface, const char * const path, int *errCode); 
 
 
+/*
+   Debug function for printing the value the object last parsed by the parser.
+   Normal usage should use JsonParser_GetDataType followed by JsonParser_Get[TYPE]Value.
+
+*/
 int JsonParser_Debug_PrintCurrent(struct ParserInterface *parserInterface);
 
 
+/*
+   Debug function for iterating through the entire JSON and printing all members.
+
+*/
 void JsonParser_Debug_PrintAll(struct ParserInterface *parserInterface, int *errCode);
-
-
-int JsonParser_Init(struct ParserInterface *parserInterface, char *filePath);
-
-
-void JsonParser_Free(struct ParserInterface *parserInterface);
 
 
 

@@ -6,6 +6,7 @@
 
 // TODO: Error code parameter for functions (multiple return values pattern)
 
+// 6/12/26: **** Silent error for print_all when compiling with -DNDEBUG
 // 5/22/26: Commented out usages of addrStack, memberCountStack, FinishParsingObjectOrArray
 // 5/22/26: TODO Clear byte array with each usage
 // TODO: 5/22/26 Better memory chunk size allocation for byteArr
@@ -145,12 +146,6 @@ int UpdateByteArray(struct Parser *parser, unsigned char byteVal) {
 		return EXIT_FAILURE;
 	}
 
-	/*
-	for (size_t i = 0; i < parser->byteArrMaxItems; ++i) {
-		printf("%d ", parser->byteArr[i]);
-	}
-	printf("\n");*/
-
 	return 0;
 }
 
@@ -170,26 +165,6 @@ int UpdateAddrArray(struct Parser *parser, void *addr) {
 		&parser->addrArrMaxItems, PARSER_ARRAY_BLOCK_SIZE)) {
 		return EXIT_FAILURE;
 	}
-	
-	return 0;
-}
-
-
-int InitObjectMetadata(struct Parser *parser) {
-	size_t initMemberCount = 0;
-	//if (ArrayStack_Push(&parser->memberCountStack, &initMemberCount)) return EXIT_FAILURE;
-	//if (ArrayStack_Push(&parser->modeStack, &PARSER_OBJ)) return EXIT_FAILURE;
-	//parser->isParsingArray = false;
-	
-	return 0;
-}
-
-
-int InitArrayMetadata(struct Parser *parser) {
-	size_t initMemberCount = 0;
-	//if (ArrayStack_Push(&parser->memberCountStack, &initMemberCount)) return EXIT_FAILURE;
-	//if (ArrayStack_Push(&parser->modeStack, &PARSER_ARR)) return EXIT_FAILURE;
-	//parser->isParsingArray = true;
 	
 	return 0;
 }
@@ -310,7 +285,7 @@ int ParseNumber(struct Parser *parser) {
 		++convertedParsedValPtr;
 	}
 	
-	unsigned char *valTypePtr = parser->byteArr + parser->byteArrIdx;
+	//unsigned char *valTypePtr = parser->byteArr + parser->byteArrIdx;
 	//if (ArrayStack_Push(&parser->addrStack, &valTypePtr)) return EXIT_FAILURE;
 	if (UpdateByteArray(parser, (unsigned char) parsedValueType)) return EXIT_FAILURE;
 	if (UpdateByteArray(parser, '\0')) return EXIT_FAILURE;
@@ -327,7 +302,7 @@ int ParseNumber(struct Parser *parser) {
 
 int ParseBoolToParseValueFinish(struct Parser *parser, bool boolVal) {
 	if (UpdateByteArray(parser, boolVal)) return EXIT_FAILURE;
-	unsigned char *valTypePtr = parser->byteArr + parser->byteArrIdx;
+	//unsigned char *valTypePtr = parser->byteArr + parser->byteArrIdx;
 	// Assumption #4: Bool length is 1 byte
 	if (UpdateByteArray(parser, JP_BOOL)) return EXIT_FAILURE;
 	if (UpdateByteArray(parser, '\0')) return EXIT_FAILURE;
@@ -898,9 +873,6 @@ int _IterateParser(struct Parser *parser) {
 			case PARSE_INIT_TO_PARSE_OBJECT_OPEN_CURLY_BRACE:
 			case PARSE_ARRAY_OPEN_BRACKET_TO_PARSE_OBJECT_OPEN_CURLY_BRACE:
 			case BEGIN_VALUE_PARSE_TO_PARSE_OBJECT_OPEN_CURLY_BRACE:
-				if (!parser->iterateOnly)
-					if (InitObjectMetadata(parser)) return EXIT_FAILURE;
-					
 				if (ArrayStack_Push(&parser->modeStack, &PARSER_OBJ)) return EXIT_FAILURE;
 				parser->isParsingArray = false;
 				
@@ -909,18 +881,12 @@ int _IterateParser(struct Parser *parser) {
 			case PARSE_INIT_TO_PARSE_ARRAY_OPEN_BRACKET:
 			case BEGIN_VALUE_PARSE_TO_PARSE_ARRAY_OPEN_BRACKET:
 			case ARRAY_OPEN_BRACKET_AGAIN_TO_ARRAY_OPEN_BRACKET:
-				if (!parser->iterateOnly)	
-					if (InitArrayMetadata(parser)) return EXIT_FAILURE;
-				
 				if (ArrayStack_Push(&parser->modeStack, &PARSER_ARR)) return EXIT_FAILURE;
 				parser->isParsingArray = true;
 				
 				parser->state = PARSE_ARRAY_OPEN_BRACKET;
 				break;
 			case ARRAY_OPEN_BRACKET_TO_ARRAY_OPEN_BRACKET_AGAIN:
-				if (!parser->iterateOnly)	
-					if (InitArrayMetadata(parser)) return EXIT_FAILURE;
-				
 				if (ArrayStack_Push(&parser->modeStack, &PARSER_ARR)) return EXIT_FAILURE;
 				parser->isParsingArray = true;
 				
@@ -1532,7 +1498,6 @@ int _IterateParserInterface(struct ParserInterface *interface, const enum Parser
 				break;
 			case NEXT_IS_OBJ_TO_OBJ_EXPANDED:
 				assert(*ps == PARSE_OBJECT_OPEN_CURLY_BRACE);
-				// Nothing to be done, InitObjectMetadata already called
 				interface->_state = PARSER_INTERFACE_OBJ_EXPANDED;
 				break;
 			case NEXT_IS_ARR_TO_ARR_EXPANDED:
@@ -1783,6 +1748,7 @@ long double JsonParser_GetLongDoubleValue(struct ParserInterface *interface, int
 
 /*
 Return value: Pointer to null-terminated string if errCode == 0
+	If the string is empty, points to a null terminator.
 
 Error codes:
 	- EXIT_FAILURE: The last call to the interface was not a call to JsonParser_GetNextType
@@ -1821,7 +1787,7 @@ char* JsonParser_GetStringValue(struct ParserInterface *interface, int * const e
 
 /*
 Return value: A pointer to the start of the key value string.
-	If the string is empty, points to a null character.
+	If the string is empty, points to a null terminator.
 
 Error codes:
 	- EXIT_FAILURE: The current position of the parser may be in an array, or
@@ -1899,9 +1865,12 @@ const char * JsonParser_GetKeyValue(struct ParserInterface *interface, int * con
 
 
 /*
-Return values:
+   When JsonParser_HasNext returns false, this function should be called to move the parser
+   forward. After calling JsonParser_Collapse, JsonParser_HasNext should be called.
+
+   Return values:
 	0: Object/array collapsed successfully.
-	EXIT_FAILURE: Error
+	All other values: Error
 */
 int JsonParser_Collapse(struct ParserInterface *interface) {
 	// Preconditions
@@ -1909,16 +1878,17 @@ int JsonParser_Collapse(struct ParserInterface *interface) {
 	_CheckParserInterfaceState(interface);
 	
 	int ret = _IterateParserInterface(interface, P_CMD_COLLAPSE);
-	assert(ret == 0 || ret == EXIT_FAILURE);
-	
 	return ret;
 }
 
 
 /*
-Return values:
+   When JsonParser_GetNextType returns either a JP_OBJ or a JP_ARR, this function should be called to
+   move the parser forward. After calling JsonParser_Expand, JsonParser_HasNext should be called.
+
+   Return values:
 	0: Object/array expanded successfully.
-	EXIT_FAILURE: Error
+	All other values: Error
 */
 int JsonParser_Expand(struct ParserInterface *interface) {
 	// Preconditions
@@ -1926,19 +1896,19 @@ int JsonParser_Expand(struct ParserInterface *interface) {
 	_CheckParserInterfaceState(interface);
 	
 	int ret = _IterateParserInterface(interface, P_CMD_EXPAND);
-	assert(ret == 0 || ret == EXIT_FAILURE);
-	
 	return ret;
 }
 
 
 /*
-Return values:
-	JP_OBJ: Object
+   Return values:
+   	JP_OBJ: Object
 	JP_ARR: Array
-	
-Error codes:
-	- EXIT_FAILURE: Error
+	JP_BOOL: Boolean
+	JP_S_LONG: Signed long
+	JP_LONG_DOUBLE: Signed floating number
+	JP_STR: String
+	JP_NULL: NULL value
 */
 enum ParserDataType JsonParser_GetNextType(struct ParserInterface *interface, int * const errCode) {
 	// Preconditions
@@ -1949,7 +1919,6 @@ enum ParserDataType JsonParser_GetNextType(struct ParserInterface *interface, in
 	*errCode = 0;
 	
 	int ret = _IterateParserInterface(interface, P_CMD_GET_NEXT_TYPE);
-	assert(ret == 0 || ret == EXIT_FAILURE);
 	switch (ret) {
 		case 0:
 			switch (interface->_state) {
@@ -1992,12 +1961,14 @@ enum ParserDataType JsonParser_GetNextType(struct ParserInterface *interface, in
 
 
 /*
-Return values:
-	JP_OBJ: Object
+   Return values:
+   	JP_OBJ: Object
 	JP_ARR: Array
-	
-Error codes:
-	- EXIT_FAILURE: Error
+	JP_BOOL: Boolean
+	JP_S_LONG: Signed long
+	JP_LONG_DOUBLE: Signed floating number
+	JP_STR: String
+	JP_NULL: NULL value
 */
 enum ParserDataType JsonParser_GetCurrentType(struct ParserInterface *interface, int * const errCode) {
 	// Preconditions
@@ -2047,11 +2018,6 @@ Return values:
 			cannot guarantee that there will be no parsing errors during the actual parsing of the
 			object made with the next available command, JsonParser_GetNextType.
 	false: There are no additional objects available within this object/array.
-
-Error codes:
-	- EXIT_FAILURE: Error
-	- PARSE_END_OF_FILE
-	- PARSE_ERROR_UNEXPECTED_CHAR
 */
 bool JsonParser_HasNext(struct ParserInterface *interface, int * const errCode) {
 	// Preconditions
@@ -2141,7 +2107,12 @@ int _JsonParser_SkipObjArr(struct ParserInterface *interface, enum ParserDataTyp
 
 
 /*
-Examples:
+   Moves the parser to the location specified by [path], if it exists.
+   Once navigation is successful, the type of the object at path can be
+   retrieved via JsonParser_GetCurrentType, and the value can be retrieved by
+   the relevant JsonParser_Get[TYPE]Value function. 
+
+   Example paths:
 	x.y
 	x[0]
 	[2]
@@ -2151,6 +2122,10 @@ Examples:
 	["objWithPeriodsInKey...."].x
 	
 	Single quotes currently unsupported (ex. ['obj'])
+
+   Note: If sending the value of the path from a shell (such as when using the "goto" executable in the repo)
+   	 quotes in the path need to be escaped. Ex: ./goto "sample.json" [\"students\"][23][\"first_name\"]
+   
 */
 bool JsonParser_GoTo(struct ParserInterface *interface, const char * const path, int *errCode) {
 	// Preconditions
@@ -2351,7 +2326,11 @@ bool JsonParser_GoTo(struct ParserInterface *interface, const char * const path,
 	return (!stopSearch && locationFound);
 }
 
+/*
+   Debug function for printing the value the object last parsed by the parser.
+   Normal usage should use JsonParser_GetDataType followed by JsonParser_Get[TYPE]Value.
 
+*/
 int JsonParser_Debug_PrintCurrent(struct ParserInterface *parserInterface) {
 	int errCode = 0;
 	
@@ -2403,7 +2382,10 @@ int JsonParser_Debug_PrintCurrent(struct ParserInterface *parserInterface) {
 	return errCode;
 }
 
+/*
+   Debug function for iterating through the entire JSON and printing all members.
 
+*/
 void JsonParser_Debug_PrintAll(struct ParserInterface *parserInterface, int *errCode) {
 	*errCode = 0;
 
@@ -2533,7 +2515,11 @@ void JsonParser_Debug_PrintAll(struct ParserInterface *parserInterface, int *err
 	}	
 }
 
+/*
+   Always needs to be called prior to using the parser. Takes in the [filePath] as an argument and
+   attempts to open it.
 
+*/
 int JsonParser_Init(struct ParserInterface *parserInterface, char *filePath) {
 	assert(EXIT_FAILURE != PARSE_END_OF_FILE); // _IterateParserInterface
 
@@ -2575,7 +2561,10 @@ int JsonParser_Init(struct ParserInterface *parserInterface, char *filePath) {
 	return 0;
 }
 
+/*
+   Always needs to be called after finishing using the parser to free allocated memory.
 
+*/
 void JsonParser_Free(struct ParserInterface *parserInterface) {
 	struct Parser *parser = &parserInterface->_parser;
 

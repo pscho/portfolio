@@ -1,6 +1,7 @@
 */*.o
 */*.db
 */*.so
+*/*.swp
 sqlite_terminal/sqlite-amalgamation*
 sqlite_terminal/sqlite3.c
 sqlite_terminal/sqlite3.h
@@ -8,4 +9,4 @@ sqlite_terminal/sqlite_terminal
 dotnet_spa
 *.sql
 json_parser/print_all
-
+json_parser/goto
