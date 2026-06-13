@@ -6,7 +6,6 @@
 
 // TODO: Error code parameter for functions (multiple return values pattern)
 
-// 6/12/26: **** Silent error for print_all when compiling with -DNDEBUG
 // 5/22/26: Commented out usages of addrStack, memberCountStack, FinishParsingObjectOrArray
 // 5/22/26: TODO Clear byte array with each usage
 // TODO: 5/22/26 Better memory chunk size allocation for byteArr
@@ -2409,11 +2408,13 @@ void JsonParser_Debug_PrintAll(struct ParserInterface *parserInterface, int *err
 	unsigned char mode = 0;
 	if (dataType == JP_OBJ) {
 		mode = PARSER_OBJ;
-		assert(ArrayStack_Push(&modeStack, &PARSER_OBJ) == 0);
+		*errCode = ArrayStack_Push(&modeStack, &PARSER_OBJ);
+		assert(*errCode == 0);
 		printf("{\n");
 	} else {
 		mode = PARSER_ARR;
-		assert(ArrayStack_Push(&modeStack, &PARSER_ARR) == 0);
+		*errCode = ArrayStack_Push(&modeStack, &PARSER_ARR);
+		assert(*errCode == 0);
 		printf("[\n");
 	}
 	
@@ -2433,9 +2434,11 @@ void JsonParser_Debug_PrintAll(struct ParserInterface *parserInterface, int *err
 			*errCode = ArrayStack_Pop(&modeStack, &mode);
 			
 			assert(*errCode == 0);
-			if (!ArrayStack_IsEmpty(&modeStack))
-				assert(ArrayStack_Peek(&modeStack, &mode) == 0);
-			
+			if (!ArrayStack_IsEmpty(&modeStack)) {
+				*errCode = ArrayStack_Peek(&modeStack, &mode);
+				assert(*errCode == 0);
+			}
+
 			*errCode = JsonParser_Collapse(parserInterface);
 			assert(*errCode == 0);
 			
@@ -2455,10 +2458,12 @@ void JsonParser_Debug_PrintAll(struct ParserInterface *parserInterface, int *err
 			if (dataType == JP_OBJ || dataType == JP_ARR) {
 				if (dataType == JP_OBJ) {
 					mode = PARSER_OBJ;
-					assert(ArrayStack_Push(&modeStack, &PARSER_OBJ) == 0);
+					*errCode = ArrayStack_Push(&modeStack, &PARSER_OBJ);
+					assert(*errCode == 0);
 				} else {
 					mode = PARSER_ARR;
-					assert(ArrayStack_Push(&modeStack, &PARSER_ARR) == 0);
+					*errCode = ArrayStack_Push(&modeStack, &PARSER_ARR);
+					assert(*errCode == 0);
 				}
 				if (dataType == JP_OBJ) {
 					printf("{\n");
