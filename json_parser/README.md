@@ -15,3 +15,13 @@ To use as a library:
 3. Run `gcc -o json_parser.o -c json_parser.c`
 4. Use the API functions in `json_parser.h`
 
+Usage:
+
+1. Please see "Typical_Usage.jpg" for a state transition diagram showing typical usage.
+2. `json_parser.h` contains documentation for each API function.
+3. Please see `sample.c`, `goto.c`, and `print_all.c` for usage examples. After running make:
+	a. sample: `./sample "json_parser_tests/sample.json"`
+	b. goto: `./goto json_parser_tests/random1.json [\"pairs\"][9][\"y..1\"][3][2][\"c..\"][2]`
+	c. print_all: `./print_all "json_parser_tests/random1.json"`
+
+

@@ -1,5 +1,5 @@
 CC = gcc-12
-objects = utils.o json_parser.o print_all.o goto.o print_all goto
+objects = utils.o json_parser.o print_all.o goto.o sample.o print_all goto sample
 
 ifeq ($(DEBUG), 1)
 	CFLAGS = -ggdb -DDEBUG -Wall -Wextra -rdynamic
@@ -16,6 +16,10 @@ goto.o: json_parser.h utils.h
 print_all: print_all.o json_parser.o utils.o
 
 print_all.o: json_parser.h
+
+sample: sample.o json_parser.o utils.o
+
+sample.o: json_parser.h
 
 json_parser.o: json_parser.h utils.h
 
