@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en-us">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Northwind</title>
+<style>
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  margin: 0px;
+}
+
+body {
+  margin: 0px;
+  background-color: darkgrey;
+}
+
+.container {
+  display: grid;
+  grid-template-rows: auto auto auto 1fr 1fr 1fr auto;
+  grid-template-columns: [first] auto [second] auto [third];
+  padding: 3px;
+  width: 100vw;
+}
+
+nav {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+nav div {
+  flex-grow: 1;
+  background-color: white;
+  padding: 3px;
+}
+
+#action_menu {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  list-style: none;
+  margin: 0;
+}
+
+#action_menu li {
+  display: flex;
+  flex-grow: 1;
+}
+
+#action_menu li button {
+  flex-grow: 1;
+  background-color: white;
+}
+
+nav div:hover {
+ background-color: lightblue;
+}
+
+#main_table_div {
+  overflow: scroll;
+  display: flex;
+  grid-row: 4 / 7;
+}
+
+#main_table {
+  background-color:white;
+  /* TODO: Padding overflow when x-axis scrolling */
+}
+
+/* Mobile first */
+.container > * {
+  background-color: lightgrey;
+  padding: 1px;
+  grid-column: first / third;
+}
+
+@media (min-width: 576px) {
+  nav,
+  #action_menu {
+    flex-direction: row;
+  }
+  
+  .container {
+    height: 100vh;
+  }
+}
+
+@media (min-width: 768px) {
+  #main_table_div {
+    grid-column: first / second;
+  }
+
+  #forms {
+    grid-row: 4 / 7;
+    grid-column: second / third;
+  }
+  
+  footer {
+    grid-row: 7 / 8;
+  }
+}
+
+</style>
+<script src="spa.js"></script>
+</head>
+<body>
+
+<div class="container">
+  <header>Northwind App</header>
+  <nav>
+    <div>Orders</div>
+    <div>Customers</div>
+    <div>Suppliers</div>
+    <div>Shippers</div>
+    <div>Products</div>
+    <div>Categories</div>
+    <div>Employees</div>
+    <!-- TODO: Long text ellipsis -->
+  </nav>
+  <menu id="action_menu">
+      <li><button onclick="">New</button></li>
+      <li><button>Open?</button></li>
+      <li><button>Update Selected Row</button></li>
+      <li><button>Delete Selected Row</button></li>
+  </menu>
+  <main id="main_table_div">
+    <table id="main_table" style="flex-grow:1;">	
+    </table>
+  </main>
+  <div id="forms">
+    <form id="form_1">
+      Val: <input type="text" name="n" class="form_input">
+      <input type="submit" value="Submit" class="form_submit">
+    </form>
+    <form id="form_2">
+      Val: <input type="text" name="n" class="form_input">
+      <input type="submit" value="Submit" class="form_submit">
+    </form>
+    <form id="form_3">
+      Val: <input type="text" name="n" class="form_input">
+      <input type="submit" value="Submit" class="form_submit">
+    </form>
+  </div>
+  <footer>Footer</footer>
+</div>
+
+</body>
+</html>

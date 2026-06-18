@@ -4,7 +4,7 @@ A basic, state-machine based, "immediate access" JSON parser. Written for the JS
 
 This was mostly written for the class and to experiment with a different type of parser to see if it could be made more performant; not really intended to be used in production.
 
-"Immediate access" means that it does not actually parse the JSON in its entirety to produce a dictionary-like object like how many other parsers do; there is no parse() function. Instead, the intended use is to navigate to a particular location in a JSON file using the `JsonParser_GoTo` function, and then retrieving just the needed value(s) at or after that location.
+"Immediate access" means that it does not actually parse the JSON in its entirety to produce a dictionary-like object like how many other parsers do; there is no parse() or deserialize() function. Instead, the intended use is to navigate to a particular location in a JSON file using the `JsonParser_GoTo` function, and then retrieving just the needed value(s) at or after that location.
 
 Build instructions for repo:
 1. Run `make`
