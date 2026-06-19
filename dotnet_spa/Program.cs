@@ -44,8 +44,7 @@ static class SPAServer {
 				addr += Int64.Parse(addrParts[0]);
 				addrValidated = true;
 			} catch (Exception ex) {
-				Console.Error.WriteLine(ex.Message);
-				Console.Error.WriteLine(ex.StackTrace);
+				Console.Error.WriteLine(ex.ToString());
 			}	
 		}
 
@@ -58,8 +57,7 @@ static class SPAServer {
 		try {
 			port = Int32.Parse(args[2]);
 		} catch (Exception ex) {
-			Console.Error.WriteLine(ex.Message);
-			Console.Error.WriteLine(ex.StackTrace);
+			Console.Error.WriteLine(ex.ToString());
 			Console.Error.WriteLine("Invalid port: {0}", args[2]);
 			return;
 		}
@@ -96,16 +94,14 @@ static class SPAServer {
 			}
 		
 		} catch (Exception ex) {
-			Console.Error.WriteLine(ex.Message);
-			Console.Error.WriteLine(ex.StackTrace);
+			Console.Error.WriteLine(ex.ToString());
 			
 		} finally {
 			try {
 				Console.WriteLine("Shutting down listening socket...");
 				socket.Shutdown(SocketShutdown.Both);
 			} catch (Exception ex) {
-				Console.Error.WriteLine(ex.Message);
-				Console.Error.WriteLine(ex.StackTrace);
+				Console.Error.WriteLine(ex.ToString());
 			}
 			socket.Close();
 		}
@@ -120,6 +116,7 @@ static class SPAServer {
 class ChildSocketProcessor {
 	const Int32 BUFFER_SIZE = 512;
 	const string RESP_OK = "HTTP/1.1 200 OK";
+	const string RESP_CREATED = "HTTP/1.1 201 Created";
 	const string responseTemplate = "{0}\r\n{1}\r\n\r\n{2}";
 	
 	int Id;
@@ -236,6 +233,7 @@ class ChildSocketProcessor {
 								System.DateTime.Now.ToString(), Id, ex.Message, byteStr);
 						}
 						
+						object? parsedBody = null;
 						if (asciiValidated) {
 							Console.WriteLine("{0} Thread {1}: Received:\n{2}", System.DateTime.Now.ToString(),
 												 Id, requestStr);
@@ -379,7 +377,6 @@ class ChildSocketProcessor {
 							if (parseState != ReqParse.Body)
 								parseState = ReqParse.Error;
 
-							object? parsedBody = null;
 							if (parseState != ReqParse.Error && string.Equals(protocol, "HTTP/1.1\r\n")) {
 								switch (httpMethod) {
 									case "GET":
@@ -411,6 +408,7 @@ class ChildSocketProcessor {
 											case "/employees":
 												requestMsg = RequestMsg.GET_EMPLOYEES;
 												break;
+											// default requestMsg is BAD_REQUEST
 										}
 										break;
 									
@@ -493,6 +491,7 @@ class ChildSocketProcessor {
 														UNPROCESSIBLE_CONTENT;
 												}
 												break;
+											// default requestMsg is BAD_REQUEST
 										}
 										break;
 								}
@@ -504,7 +503,7 @@ class ChildSocketProcessor {
 						string headersTemplate = "";
 						Byte[] bodyUtf8Bytes;
 						string headersStr;
-						string query = "";
+						List<List<String>> rows; 
 						switch (requestMsg) {
 							case RequestMsg.BAD_REQUEST:
 							case RequestMsg.UNPROCESSIBLE_CONTENT:
@@ -593,7 +592,8 @@ class ChildSocketProcessor {
 											String.Format("sqlite3_threadsafe; {0}", retVal));
 									}									
 								}
-								
+							
+								string query = "";
 								switch (requestMsg) {
 									case RequestMsg.GET_ORDERS:
 										query = "SELECT * FROM Orders;";
@@ -618,7 +618,7 @@ class ChildSocketProcessor {
 										break;
 								}
 								
-								List<List<String>> rows = RunQueryNoBinding(query, db, dbStmt);
+								rows = RunQueryNoBinding(query, db, dbStmt);
 								const string json = "{{\r\n\t\"colNames\": [{0}],\r\n\t\"rows\": [{1}]\r\n}}\r\n";
 								string jsonColNames = "";
 								string jsonRows = "";
@@ -669,18 +669,58 @@ class ChildSocketProcessor {
 							case RequestMsg.POST_PRODUCTS:
 							case RequestMsg.POST_CATEGORIES:
 							case RequestMsg.POST_EMPLOYEES:
+								string cmd = "";
 								switch (requestMsg) {
 									case RequestMsg.POST_CUSTOMERS:
+										cmd = "INSERT INTO Customers VALUES (?0, ?1, ?2, ?3, ?4, ?5);";
 										break;
-								} // TODO: Pick up here.. RunQuery(binding)...
+								}
+								PrepareStatement(db, cmd, dbStmt);
+
+								Debug.Assert(parsedBody != null);
+								switch (requestMsg) {
+									case RequestMsg.POST_CUSTOMERS:
+										Customer cu = (Customer) parsedBody;
+										BindText(dbStmt, cu.CustomerName);
+										BindText(dbStmt, cu.ContactName);
+										BindText(dbStmt, cu.Address);
+										BindText(dbStmt, cu.City);
+										BindText(dbStmt, cu.PostalCode);
+										BindText(dbStmt, cu.Country);
+										break;
+								}
+								RunCommand(dbStmt);
+							
+								string location = "/";
+								switch (requestMsg) {
+									case RequestMsg.POST_CUSTOMERS:
+										location += "customers/";
+										cmd = "SELECT MAX(CustomerID) FROM Customers;";
+										break;
+								}
+
+								rows = RunQueryNoBinding(cmd, db, dbStmt);
+								location += rows[0][0];
+
+								headersTemplate = "Location: {0}\r\n" +
+									"Content-Length: 0\r\n" +
+									"Date: {1}";
+									
+								dateTimeStr = System.DateTime.Now.ToString(dateTimePattern);
+								headersStr = String.Format(headersTemplate,
+													location,
+													dateTimeStr);
+								responseStr = String.Format(responseTemplate,
+												RESP_CREATED,
+												headersStr,
+												body);
+								// TODO: Pick up here.. js?
+
 								break;
-							default:
-								throw new NotImplementedException();
 						}
 						
 					} catch (Exception ex) {
-						Console.Error.WriteLine(ex.Message);
-						Console.Error.WriteLine(ex.StackTrace);
+						Console.Error.WriteLine(ex.ToString());
 						dateTimeStr = System.DateTime.Now.ToString(dateTimePattern);
 						responseStr = "HTTP/1.1 500 Internal Server Error\r\nDate: {0}\r\nContent-Length: 0\r\n\r\n";
 						responseStr = String.Format(responseStr, dateTimeStr);
@@ -710,16 +750,13 @@ class ChildSocketProcessor {
 		} catch (Exception ex) {
 			Console.Error.WriteLine("{0} Thread {1} error for request:\n{2}", System.DateTime.Now.ToString(), 
 									Id, requestStr);
-			Console.Error.WriteLine(ex.Message);
-			Console.Error.WriteLine(ex.StackTrace);
-		
+			Console.Error.WriteLine(ex.ToString());		
 		} finally {
 			Console.WriteLine("{0} Thread {1} closing...", System.DateTime.Now.ToString(), Id);
 			try {
 				ChildSocket.Shutdown(SocketShutdown.Both);
 			} catch (Exception ex) {
-				Console.Error.WriteLine(ex.Message);
-				Console.Error.WriteLine(ex.StackTrace);
+				Console.Error.WriteLine(ex.ToString());
 			}
 			
 			if (db != 0) {

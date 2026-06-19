@@ -18,8 +18,8 @@ internal static partial class Sqlite3 {
 													out IntPtr pzTail);
 	
 	[LibraryImport("sqlte_dn.so", StringMarshalling = StringMarshalling.Utf8)]
-	internal static partial SqliteCode sqlite3_bind_text(IntPtr stmt, int i, string zData, int nData,
-															IntPtr xDel = 0); // TODO: Delegate param for xDel?
+	internal static partial SqliteCode sqlite3_bind_text(
+			IntPtr stmt, int i, string zData, int nData, IntPtr xDel = 0); // TODO: Delegate param for xDel?
 	
 	[LibraryImport("sqlte_dn.so")]
 	internal static partial SqliteCode sqlite3_step(IntPtr stmt);
@@ -69,22 +69,63 @@ internal static partial class Sqlite3 {
 		SQLITE_DONE = 101
 	}
 	
+	internal static void PrepareStatement(IntPtr db, string cmd, IntPtr stmt) {
+		Debug.Assert(db != 0, "db");
+		Debug.Assert(cmd.Length != 0, "cmd");
+		Debug.Assert(stmt == 0, "stmt");
+
+		IntPtr pzTail = new IntPtr(0);
+		SqliteCode errCode = sqlite3_prepare_v2(db, cmd, -1, out stmt, out pzTail);
+		if (errCode != SqliteCode.SQLITE_OK) {
+			throw new Exception(String.Format("HespaUtils.PrepareStatement {0} {1} {2} {3}", errCode, db, cmd, stmt));
+		}
+		Debug.Assert(stmt != 0, "stmt");
+
+		GC.KeepAlive(pzTail);	
+	}
+
+	internal static void BindText(IntPtr stmt, string val) {
+		SqliteCode errCode = sqlite3_bind_text(stmt, 0, val, -1, -1);
+		if (errCode != SqliteCode.SQLITE_OK) {
+			throw new Exception(String.Format("HespaUtils.BindText {0} {1} {2}", errCode, stmt, val));
+		}
+		Debug.Assert(stmt != 0, "stmt");
+
+	}
+
+	internal static void RunCommand(IntPtr stmt) {
+		SqliteCode errCode = SqliteCode.SQLITE_OK;
+		try {
+			errCode = sqlite3_step(stmt);
+			if (errCode != SqliteCode.SQLITE_DONE) {
+				throw new Exception(String.Format("{0}", errCode));
+			}
+
+		} catch (Exception ex) {
+			Console.Error.WriteLine("HespaUtils.RunCommand {0}", stmt);
+			Console.Error.WriteLine(ex.ToString());
+		} finally {
+			errCode = sqlite3_finalize(stmt);
+			if (errCode != SqliteCode.SQLITE_OK) {
+				throw new Exception(String.Format("HespaUtils.RunCommand {0} {1}", errCode, stmt));
+			}
+			stmt = 0;
+		}
+
+		GC.KeepAlive(stmt);
+	}
+
 	internal static List<List<string>> RunQueryNoBinding(string query, IntPtr db, IntPtr stmt) {
-		Debug.Assert(query.Length != 0, "query length");
-		Debug.Assert(db != 0, "valid db");
-		Debug.Assert(stmt == 0, "empty stmt");
+		Debug.Assert(query.Length != 0, "query");
+		Debug.Assert(db != 0, "db");
+		Debug.Assert(stmt == 0, "stmt");
 		
 		var rows = new List<List<string>>();
 		int numCols = 0;
-	
-		IntPtr pzTail = new IntPtr(0);
-		SqliteCode errCode = sqlite3_prepare_v2(db, query, -1, out stmt, out pzTail);
-		if (errCode != SqliteCode.SQLITE_OK) {
-			throw new Exception(String.Format("sqlite3_prepare_v2 error; query: {0}, errCode: {1}", query,
-												errCode));
-		}
-		Debug.Assert(stmt != 0, "sqlite3_prepare_v2 valid stmt");
+
+		PrepareStatement(db, query, stmt);
 		
+		SqliteCode errCode = SqliteCode.SQLITE_OK;
 		SqliteCode step_res = sqlite3_step(stmt);
 		if (step_res == SqliteCode.SQLITE_DONE || step_res == SqliteCode.SQLITE_ROW) {
 			numCols = sqlite3_column_count(stmt);
@@ -123,7 +164,8 @@ internal static partial class Sqlite3 {
 										errCode = sqlite3_errcode(db);
 										if (errCode != SqliteCode.SQLITE_ROW) {
 											throw new Exception(
-												String.Format("sqlite3_column_text; code: {0}", errCode));
+												String.Format(
+												"sqlite3_column_text; code: {0}", errCode));
 										} else {
 											row.Add("null");
 										}
@@ -164,7 +206,8 @@ internal static partial class Sqlite3 {
 		if (errCode != SqliteCode.SQLITE_OK) {
 			throw new Exception(String.Format("sqlite3_finalize; errCode: {0}", errCode));
 		}
-	
+		stmt = 0;
+
 		return rows;
 	} 
 }

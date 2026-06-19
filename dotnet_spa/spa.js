@@ -97,7 +97,7 @@ function processSubmit(form) {
 				fillMainTableReq.responseType = "json";
 				//fillMainTableReq.addEventListener("load", fillMainTableListener);
 				fillMainTableReq.onreadystatechange = fillMainTable;
-				fillMainTableReq.open("GET", "/employees");
+				fillMainTableReq.open("GET", "/customers");
 				fillMainTableReq.send();
 
 				for (let i = 0; i < form.children.length; ++i) {
@@ -130,7 +130,7 @@ function domContentLoaded() {
 	fillMainTableReq.responseType = "json";
 	//fillMainTableReq.addEventListener("load", fillMainTableListener);
 	fillMainTableReq.onreadystatechange = fillMainTable;
-	fillMainTableReq.open("GET", "/employees");
+	fillMainTableReq.open("GET", "/customers");
 	fillMainTableReq.send();
 
 	let forms = document.getElementsByTagName("form");

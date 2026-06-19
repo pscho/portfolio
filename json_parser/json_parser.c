@@ -1492,8 +1492,6 @@ int _IterateParserInterface(struct ParserInterface *interface, const enum Parser
 						parser->state == PARSE_ARRAY_CLOSE_BRACKET_AGAIN);
 				interface->_state = PARSER_INTERFACE_COLLAPSED;
 				
-				// TODO: while modeStack len != same......
-				
 				break;
 			case NEXT_IS_OBJ_TO_OBJ_EXPANDED:
 				assert(*ps == PARSE_OBJECT_OPEN_CURLY_BRACE);
